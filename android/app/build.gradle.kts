@@ -6,7 +6,7 @@ plugins {
 
 android {
 
-    namespace = "com.example.vtap"
+    namespace = "com.premjees.vtap"
 
     compileSdk = 36
 
@@ -14,7 +14,7 @@ android {
 
     defaultConfig {
 
-        applicationId = "com.example.vtap"
+        applicationId = "com.premjees.vtap"
 
         minSdk = 24
 
