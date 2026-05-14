@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "712249917483",
+    "project_id": "vtap-6958b",
+    "storage_bucket": "vtap-6958b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:712249917483:android:22f339939f8d9ad2d72a6e",
+        "android_client_info": {
+          "package_name": "com.premjees.vtap"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "712249917483-4m24bkqb6bkgcog4f11uqm2d7i6sjkm6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.premjees.vtap",
+            "certificate_hash": "a174fd313f38014c0daefa738c13420bdbb0c24d"
+          }
+        },
+        {
+          "client_id": "712249917483-mah41c0hhe4puvok4lo31e555gk78evn.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.premjees.vtap",
+            "certificate_hash": "1e09ca9124873e61919dbebdfffbfa6d1cb0e6be"
+          }
+        },
+        {
+          "client_id": "712249917483-ipf5lpj45ksoh4rnclpji6li93rkpq23.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA3ev2RP5fvrbmlKcXA-c1_JoGLuvLA720"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "712249917483-ipf5lpj45ksoh4rnclpji6li93rkpq23.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

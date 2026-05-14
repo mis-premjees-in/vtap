@@ -9,7 +9,7 @@ class ApiService {
   // BASE URL
   // =====================================================
 
-  static const String baseUrl = "http://tm.premjees.in/api/";
+  static const String baseUrl = "https://tm.premjees.in/api/";
 
   ApiService() {
     dio = Dio(
