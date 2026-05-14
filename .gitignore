@@ -1,0 +1,22 @@
+# Flutter/Dart related
+**/tool/
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Android related
+**/android/app/debug
+**/android/app/profile
+**/android/app/release
+**/android/app/build
+**/*.apk
+**/*.aab
+**/*.so
+
+# Files to ignore always
+.DS_Store
+*.log
+.idea/
+.vscode/
