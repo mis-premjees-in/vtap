@@ -117,6 +117,7 @@ class ApiService {
           data: {
             "table_name": "madb",
             "username": username,
+            "custom_where": "whos_who2='$username'",
             "access_token": token,
             "page": currentPage,
           },
