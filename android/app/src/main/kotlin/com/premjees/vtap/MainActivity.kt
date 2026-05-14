@@ -1,4 +1,4 @@
-package com.example.vtap
+package com.premjees.vtap
 
 import io.flutter.embedding.android.FlutterActivity
 
