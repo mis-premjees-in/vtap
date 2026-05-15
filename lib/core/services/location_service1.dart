@@ -1,88 +1,120 @@
+import 'dart:math';
+
 import 'package:geolocator/geolocator.dart';
 
-class LocationService1 {
-  // =====================================================
-  // OFFICE / SHOP LOCATION
-  // =====================================================
+class LocationService {
+  // ======================================================
+  // GET CURRENT LOCATION
+  // ======================================================
 
-  static const double officeLat = 30.911728;
-  static const double officeLng = 77.095349;
+  static Future<Position> getCurrentLocation() async {
+    bool serviceEnabled;
+    LocationPermission permission;
 
-  // =====================================================
-  // ALLOWED RADIUS IN METERS
-  // =====================================================
+    // GPS ON?
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
-  static const double allowedDistance = 10;
+    if (!serviceEnabled) {
+      throw Exception("Location service disabled");
+    }
 
-  // =====================================================
-  // CHECK USER CAN COMPLETE TASK
-  // =====================================================
+    // PERMISSION
+    permission = await Geolocator.checkPermission();
 
-  static Future<bool> canCompleteTask() async {
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      throw Exception("Location permission denied forever");
+    }
+
+    if (permission == LocationPermission.denied) {
+      throw Exception("Location permission denied");
+    }
+
+    return await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.best,
+    );
+  }
+
+  // ======================================================
+  // VALIDATE USER INSIDE PREMISE
+  // ======================================================
+
+  static Future<bool> validateUserInPremise(
+    List<dynamic> premises,
+  ) async {
     try {
-      // =====================================================
-      // LOCATION SERVICE
-      // =====================================================
-
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-
-      if (!serviceEnabled) {
-        print("LOCATION SERVICE DISABLED");
-
-        return false;
-      }
-
-      // =====================================================
-      // PERMISSION
-      // =====================================================
-
-      LocationPermission permission = await Geolocator.checkPermission();
-
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        print("LOCATION PERMISSION DENIED");
-
-        return false;
-      }
-
-      // =====================================================
-      // GET CURRENT LOCATION
-      // =====================================================
-
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.best,
-      );
+      final position = await getCurrentLocation();
 
       print(
-        "CURRENT LOCATION => ${position.latitude}, ${position.longitude}",
+        "CURRENT LOCATION => "
+        "${position.latitude}, ${position.longitude}",
       );
 
-      // =====================================================
-      // CALCULATE DISTANCE
-      // =====================================================
+      for (var premise in premises) {
+        final lat = double.tryParse(
+              premise['premises_latitude'].toString(),
+            ) ??
+            0.0;
 
-      double distance = Geolocator.distanceBetween(
-        officeLat,
-        officeLng,
-        position.latitude,
-        position.longitude,
-      );
+        final lng = double.tryParse(
+              premise['premises_longitude'].toString(),
+            ) ??
+            0.0;
 
-      print("DISTANCE => $distance");
+        final radius = double.tryParse(
+              premise['premises_radius'].toString(),
+            ) ??
+            50.0;
 
-      // =====================================================
-      // RETURN TRUE IF INSIDE 10 METERS
-      // =====================================================
+        final name = premise['premises_name'].toString();
 
-      return distance <= allowedDistance;
+        final distance = Geolocator.distanceBetween(
+          position.latitude,
+          position.longitude,
+          lat,
+          lng,
+        );
+
+        print(
+          "Checking => $name | "
+          "Distance => $distance | "
+          "Allowed => $radius",
+        );
+
+        if (distance <= radius) {
+          print("VALID PREMISE => $name");
+
+          return true;
+        }
+      }
+
+      return false;
     } catch (e) {
-      print("LOCATION ERROR => $e");
+      print("LOCATION VALIDATION ERROR => $e");
 
       return false;
     }
+  }
+
+  // ======================================================
+  // DISTANCE CALCULATOR
+  // ======================================================
+
+  static double calculateDistance(
+    double lat1,
+    double lon1,
+    double lat2,
+    double lon2,
+  ) {
+    const p = 0.017453292519943295;
+
+    final a = 0.5 -
+        cos((lat2 - lat1) * p) / 2 +
+        cos(lat1 * p) * cos(lat2 * p) * (1 - cos((lon2 - lon1) * p)) / 2;
+
+    return 12742 * asin(sqrt(a));
   }
 }

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../../core/services/storage_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../widgets/task_card.dart';
 import '../../../widgets/task_carousel_card.dart';
 import '../controllers/dashboard_controller.dart';
-import '../../../core/services/storage_service.dart';
 
 class DashboardView extends StatelessWidget {
   const DashboardView({super.key});
@@ -13,20 +13,31 @@ class DashboardView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final DashboardController controller = Get.put(DashboardController());
-    final remarksController = TextEditingController();
 
     return Scaffold(
       backgroundColor: const Color(0xFFFFF7EF),
+
+      // =====================================================
+      // BODY
+      // =====================================================
+
       body: SafeArea(
         child: Column(
           children: [
-            // Header Section
+            // =====================================================
+            // HEADER
+            // =====================================================
+
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(20, 25, 20, 30),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                    colors: [AppColors.primary, Color(0xFFFFB74D)]),
+                  colors: [
+                    AppColors.primary,
+                    Color(0xFFFFB74D),
+                  ],
+                ),
                 borderRadius: BorderRadius.only(
                   bottomLeft: Radius.circular(35),
                   bottomRight: Radius.circular(35),
@@ -35,31 +46,56 @@ class DashboardView extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // =====================================================
+                  // TOP BAR
+                  // =====================================================
+
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text("Namaste 🙏",
-                              style:
-                                  TextStyle(color: Colors.white, fontSize: 16)),
-                          Text("Work Mode On!",
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold)),
+                          Text(
+                            "Namaste 🙏",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                            ),
+                          ),
+                          SizedBox(height: 5),
+                          Text(
+                            "Work Mode On!",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ],
                       ),
                       Row(
                         children: [
+                          // =====================================================
+                          // REFRESH
+                          // =====================================================
+
                           IconButton(
-                            onPressed: () => controller.fetchTasks(),
+                            onPressed: () async {
+                              await controller.fetchTasks(
+                                showLoader: true,
+                              );
+                            },
                             icon: const Icon(
-                              Icons.refresh,
+                              Icons.refresh_rounded,
                               color: Colors.white,
                             ),
                           ),
+
+                          // =====================================================
+                          // LOGOUT
+                          // =====================================================
+
                           IconButton(
                             onPressed: () async {
                               await StorageService.clearAll();
@@ -69,11 +105,16 @@ class DashboardView extends StatelessWidget {
                               Get.snackbar(
                                 "Logout",
                                 "Logged out successfully",
-                                snackPosition: SnackPosition.BOTTOM,
+                                snackPosition: SnackPosition.TOP,
+                                backgroundColor: Colors.black87,
+                                colorText: Colors.white,
+                                margin: const EdgeInsets.all(12),
+                                borderRadius: 14,
+                                duration: const Duration(seconds: 2),
                               );
                             },
                             icon: const Icon(
-                              Icons.logout,
+                              Icons.logout_rounded,
                               color: Colors.white,
                             ),
                           ),
@@ -81,34 +122,65 @@ class DashboardView extends StatelessWidget {
                       ),
                     ],
                   ),
+
                   const SizedBox(height: 30),
+
+                  // =====================================================
+                  // STATS
+                  // =====================================================
+
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      Obx(() => _buildStatCard(
-                            title: "Pending",
-                            value: controller.tasks
-                                .where((t) => !t.isCompleted)
-                                .length
-                                .toString(),
-                            icon: Icons.pending_actions,
-                          )),
-                      Obx(() => _buildStatCard(
-                            title: "Done",
-                            value: controller.tasks
-                                .where((t) => t.isCompleted)
-                                .length
-                                .toString(),
-                            icon: Icons.task_alt,
-                          )),
+                      // =====================================================
+                      // PENDING
+                      // =====================================================
+
+                      Obx(
+                        () => _buildStatCard(
+                          title: "Pending",
+                          value: controller.tasks
+                              .where(
+                                (t) => !t.isCompleted,
+                              )
+                              .length
+                              .toString(),
+                          icon: Icons.pending_actions_rounded,
+                        ),
+                      ),
+
+                      // =====================================================
+                      // COMPLETED
+                      // =====================================================
+
+                      Obx(
+                        () => _buildStatCard(
+                          title: "Done",
+                          value: controller.tasks
+                              .where(
+                                (t) => t.isCompleted,
+                              )
+                              .length
+                              .toString(),
+                          icon: Icons.task_alt_rounded,
+                        ),
+                      ),
+
+                      // =====================================================
+                      // LANGUAGE
+                      // =====================================================
+
                       GestureDetector(
-                        onTap: () => controller.isHindi.value =
-                            !controller.isHindi.value,
-                        child: Obx(() => _buildStatCard(
-                              title: "Language",
-                              value: controller.isHindi.value ? "HI" : "EN",
-                              icon: Icons.translate,
-                            )),
+                        onTap: () {
+                          controller.toggleLanguage();
+                        },
+                        child: Obx(
+                          () => _buildStatCard(
+                            title: "Language",
+                            value: controller.isHindi.value ? "HI" : "EN",
+                            icon: Icons.translate_rounded,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -116,95 +188,236 @@ class DashboardView extends StatelessWidget {
               ),
             ),
 
-            // Attendance Section
+            // =====================================================
+            // PUNCH BUTTON
+            // =====================================================
+
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: Obx(() => controller.isPunching.value
-                  ? const LinearProgressIndicator()
-                  : Row(
-                      children: [
-                        Expanded(
-                          child: PunchSliderSmall(
-                            label: "In",
-                            color: Colors.green,
-                            icon: Icons.login,
-                            onAction: () => controller.handlePunchAction("In"),
-                            direction: SlideDirection.right,
-                          ),
-                        ),
-                        const SizedBox(width: 15),
-                        Expanded(
-                          child: PunchSliderSmall(
-                            label: "Out",
-                            color: Colors.red,
-                            icon: Icons.logout,
-                            onAction: () => controller.handlePunchAction("Out"),
-                            direction: SlideDirection.left,
-                          ),
+              padding: const EdgeInsets.fromLTRB(
+                20,
+                20,
+                20,
+                0,
+              ),
+              child: Obx(() {
+                final bool isIn = controller.currentPunchStatus.value == "in";
+
+                return InkWell(
+                  borderRadius: BorderRadius.circular(35),
+                  onTap: controller.isPunching.value
+                      ? null
+                      : () async {
+                          await controller.handlePunchAction();
+                        },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 350),
+                    height: 68,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: isIn
+                            ? [
+                                Colors.green,
+                                Colors.greenAccent,
+                              ]
+                            : [
+                                Colors.red,
+                                Colors.orange,
+                              ],
+                      ),
+                      borderRadius: BorderRadius.circular(35),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.15),
+                          blurRadius: 12,
+                          offset: const Offset(0, 5),
                         ),
                       ],
-                    )),
+                    ),
+                    child: controller.isPunching.value
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 3,
+                            ),
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                isIn
+                                    ? Icons.fingerprint_rounded
+                                    : Icons.login_rounded,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                isIn ? "🟢 PUNCHED IN" : "🔴 PUNCH IN",
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                );
+              }),
             ),
 
-            // Tasks Section
+            // =====================================================
+            // TASKS HEADER
+            // =====================================================
+
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 18,
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text("Your Tasks",
-                      style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  Obx(() => IconButton(
-                        onPressed: () => controller.isCarousel.value =
-                            !controller.isCarousel.value,
-                        icon: Icon(
-                            controller.isCarousel.value
-                                ? Icons.view_list
-                                : Icons.view_carousel,
-                            color: AppColors.primary),
-                      )),
+                  const Text(
+                    "Your Tasks",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Obx(
+                    () => IconButton(
+                      onPressed: () {
+                        controller.isCarousel.value =
+                            !controller.isCarousel.value;
+                      },
+                      icon: Icon(
+                        controller.isCarousel.value
+                            ? Icons.view_list_rounded
+                            : Icons.view_carousel_rounded,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
 
+            // =====================================================
+            // TASK LIST
+            // =====================================================
+
             Expanded(
               child: Obx(() {
+                // =====================================================
+                // LOADER
+                // =====================================================
+
                 if (controller.isLoading.value) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                    ),
+                  );
                 }
+
+                // =====================================================
+                // EMPTY
+                // =====================================================
+
                 if (controller.tasks.isEmpty) {
-                  return const Center(child: Text("No tasks found."));
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.task_alt_rounded,
+                          size: 70,
+                          color: Colors.grey.shade400,
+                        ),
+                        const SizedBox(height: 15),
+                        Text(
+                          "No tasks found",
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
                 }
+
+                // =====================================================
+                // CAROUSEL VIEW
+                // =====================================================
 
                 if (controller.isCarousel.value) {
                   return PageView.builder(
+                    controller: PageController(
+                      viewportFraction: 0.88,
+                    ),
                     itemCount: controller.tasks.length,
-                    controller: PageController(viewportFraction: 0.85),
-                    itemBuilder: (context, index) {
-                      return TaskCarouselCard(
-                        task: controller.tasks[index],
-                        isHindi: controller.isHindi.value,
-                        remarksController: remarksController,
-                        image: null,
-                        onUpload: () {},
-                        onComplete: () => controller.completeTask(index),
+                    itemBuilder: (
+                      context,
+                      index,
+                    ) {
+                      final task = controller.tasks[index];
+
+                      return Padding(
+                        padding: const EdgeInsets.only(
+                          bottom: 20,
+                        ),
+                        child: TaskCarouselCard(
+                          task: task,
+                          isHindi: controller.isHindi.value,
+                          onComplete: () async {
+                            await controller.completeTask(task);
+                          },
+                        ),
                       );
                     },
                   );
                 }
 
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: controller.tasks.length,
-                  itemBuilder: (context, index) {
-                    return TaskCard(
-                      task: controller.tasks[index],
-                      isHindi: controller.isHindi.value,
-                      isHighlighted: controller.highlightedIndex.value == index,
-                      onComplete: () => controller.completeTask(index),
+                // =====================================================
+                // LIST VIEW
+                // =====================================================
+
+                return RefreshIndicator(
+                  color: AppColors.primary,
+                  onRefresh: () async {
+                    await controller.fetchTasks(
+                      showLoader: false,
                     );
                   },
+                  child: ListView.builder(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(
+                      20,
+                      0,
+                      20,
+                      20,
+                    ),
+                    itemCount: controller.tasks.length,
+                    itemBuilder: (
+                      context,
+                      index,
+                    ) {
+                      final task = controller.tasks[index];
+
+                      return TaskCard(
+                        task: task,
+                        isHindi: controller.isHindi.value,
+                        isHighlighted:
+                            controller.highlightedIndex.value == index,
+                        onComplete: () async {
+                          await controller.completeTask(task);
+                        },
+                      );
+                    },
+                  ),
                 );
               }),
             ),
@@ -214,82 +427,47 @@ class DashboardView extends StatelessWidget {
     );
   }
 
-  Widget _buildStatCard(
-      {required String title, required String value, required IconData icon}) {
-    return Column(
-      children: [
-        Icon(icon, color: Colors.white, size: 28),
-        const SizedBox(height: 5),
-        Text(value,
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold)),
-        Text(title,
-            style: const TextStyle(color: Colors.white70, fontSize: 12)),
-      ],
-    );
-  }
-}
+  // =====================================================
+  // STAT CARD
+  // =====================================================
 
-enum SlideDirection { left, right }
-
-class PunchSliderSmall extends StatefulWidget {
-  final String label;
-  final Color color;
-  final IconData icon;
-  final VoidCallback onAction;
-  final SlideDirection direction;
-
-  const PunchSliderSmall(
-      {super.key,
-      required this.label,
-      required this.color,
-      required this.icon,
-      required this.onAction,
-      required this.direction});
-
-  @override
-  State<PunchSliderSmall> createState() => _PunchSliderSmallState();
-}
-
-class _PunchSliderSmallState extends State<PunchSliderSmall> {
-  double _dragValue = 0.0;
-  final double _maxWidth = 100.0;
-
-  @override
-  Widget build(BuildContext context) {
-    bool isRight = widget.direction == SlideDirection.right;
+  Widget _buildStatCard({
+    required String title,
+    required String value,
+    required IconData icon,
+  }) {
     return Container(
-      height: 55,
+      width: 95,
+      padding: const EdgeInsets.symmetric(
+        vertical: 12,
+        horizontal: 10,
+      ),
       decoration: BoxDecoration(
-          color: Colors.white, borderRadius: BorderRadius.circular(30)),
-      child: Stack(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
         children: [
-          Center(
-              child: Text(widget.label,
-                  style: TextStyle(
-                      color: widget.color, fontWeight: FontWeight.bold))),
-          Positioned(
-            left: isRight ? _dragValue : null,
-            right: !isRight ? _dragValue : null,
-            top: 4,
-            bottom: 4,
-            child: GestureDetector(
-              onHorizontalDragUpdate: (details) => setState(() => _dragValue =
-                  (_dragValue +
-                          (isRight ? details.delta.dx : -details.delta.dx))
-                      .clamp(0, _maxWidth)),
-              onHorizontalDragEnd: (details) {
-                if (_dragValue >= _maxWidth * 0.7) widget.onAction();
-                setState(() => _dragValue = 0);
-              },
-              child: Container(
-                width: 47,
-                decoration:
-                    BoxDecoration(color: widget.color, shape: BoxShape.circle),
-                child: Icon(widget.icon, color: Colors.white, size: 20),
-              ),
+          Icon(
+            icon,
+            color: Colors.white,
+            size: 28,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
             ),
           ),
         ],

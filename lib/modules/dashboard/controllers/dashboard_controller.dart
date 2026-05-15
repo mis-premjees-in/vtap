@@ -1,115 +1,413 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import '../../../core/services/api_service.dart';
+import '../../../core/services/location_service.dart';
 import '../../../core/services/storage_service.dart';
 import '../../../data/models/task_model.dart';
-import '../../../core/services/location_service.dart';
-import 'dart:async';
-import 'package:flutter/material.dart';
 
 class DashboardController extends GetxController {
   final ApiService _apiService = ApiService();
 
+  // =====================================================
+  // STATES
+  // =====================================================
+
   RxBool isLoading = false.obs;
+
   RxBool isPunching = false.obs;
+
   RxBool isHindi = false.obs;
+
   RxBool isCarousel = false.obs;
+
+  RxString currentPunchStatus = "out".obs;
+
+  RxInt highlightedIndex = 0.obs;
+
   RxList<TaskModel> tasks = <TaskModel>[].obs;
-  RxInt highlightedIndex = (-1).obs;
-  Timer? taskTimer;
+
+  Timer? highlightTimer;
+
+  // =====================================================
+  // INIT
+  // =====================================================
 
   @override
   void onInit() {
     super.onInit();
-    fetchTasks();
-    startTaskHighlighter();
+
+    loadInitialData();
+
+    startHighlightAnimation();
   }
 
   // =====================================================
-  // FETCH TASKS
+  // LOAD INITIAL DATA
   // =====================================================
-  Future<void> fetchTasks() async {
+
+  Future<void> loadInitialData() async {
+    await loadPunchStatus();
+
+    await autoPunchInIfInsidePremise();
+
+    await fetchTasks();
+  }
+
+  // =====================================================
+  // AUTO PUNCH
+  // =====================================================
+
+  Future<void> autoPunchInIfInsidePremise() async {
     try {
-      isLoading.value = true;
       final username = await StorageService.getUsername();
 
-      if (username.isEmpty) {
-        Get.snackbar("Error", "Username not found");
+      if (username == null || username.isEmpty) {
         return;
       }
 
-      final response = await _apiService.getTasks(username: username);
+      // already punched in
+      if (currentPunchStatus.value == "in") {
+        return;
+      }
 
-      if (response['status'] == true) {
-        final List<dynamic> records = response['response']?['Records'] ?? [];
+      final premises = await _apiService.getPremises(
+        username: username,
+      );
 
-        final completedToday =
-            await _apiService.getTodayCompletedTasks(username: username);
-        final completedIds =
-            completedToday.map((e) => e['utedb_madb'].toString()).toSet();
+      if (premises.isEmpty) {
+        return;
+      }
 
-        final List<TaskModel> fetchedTasks = records.map((json) {
-          final task = TaskModel.fromJson(json);
-          if (completedIds.contains(task.id.toString())) {
-            task.isCompleted = true;
-          }
-          return task;
-        }).toList();
+      final isInside = await LocationService.validateUserInPremise(
+        premises,
+      );
 
-        fetchedTasks.sort((a, b) {
-          if (a.isCompleted != b.isCompleted) {
-            return a.isCompleted ? 1 : -1;
-          }
-          return a.taskTime.compareTo(b.taskTime);
-        });
+      if (!isInside) {
+        return;
+      }
 
-        tasks.assignAll(fetchedTasks);
-        highlightedIndex.value = tasks.indexWhere((task) => !task.isCompleted);
+      final success = await _apiService.submitPunch(
+        username: username,
+        type: "In",
+      );
+
+      if (success) {
+        currentPunchStatus.value = "in";
+
+        Get.snackbar(
+          "🎉 Auto Punch In",
+          "Attendance marked successfully",
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          margin: const EdgeInsets.all(12),
+          borderRadius: 14,
+        );
       }
     } catch (e) {
-      print("FETCH TASKS ERROR => $e");
-    } finally {
-      isLoading.value = false;
+      print("AUTO PUNCH ERROR => $e");
     }
   }
 
   // =====================================================
-  // PUNCH ACTION (In / Out)
+  // LOAD PUNCH STATUS
   // =====================================================
-  Future<void> handlePunchAction(String type) async {
+
+  Future<void> loadPunchStatus() async {
     try {
-      isPunching.value = true;
       final username = await StorageService.getUsername();
 
-      // 1. Fetch premises list from API first
-      List<dynamic> premises =
-          await _apiService.getPremises(username: username);
-
-      // 2. Pass the list to LocationService as it now expects an argument
-      bool insideRadius = await LocationService.canCompleteTask(premises);
-
-      if (!insideRadius) {
-        Get.snackbar("Location Error",
-            "You must be within a valid office radius to mark attendance.",
-            backgroundColor: Colors.red,
-            colorText: Colors.white,
-            snackPosition: SnackPosition.BOTTOM);
+      if (username == null || username.isEmpty) {
         return;
       }
 
-      // 3. Submit Punch
-      bool success = await _apiService.submitPunch(
+      final status = await _apiService.getLastPunchStatus(
         username: username,
-        type: type, // "In" or "Out"
+      );
+
+      currentPunchStatus.value = status.toString().toLowerCase();
+    } catch (e) {
+      print("PUNCH STATUS ERROR => $e");
+    }
+  }
+
+  // =====================================================
+// FETCH TASKS
+// =====================================================
+
+  Future<void> fetchTasks({
+    bool showLoader = true,
+  }) async {
+    try {
+      if (showLoader) {
+        isLoading.value = true;
+      }
+
+      final username = await StorageService.getUsername();
+
+      if (username == null || username.isEmpty) {
+        return;
+      }
+
+      // =========================================
+      // GET TASKS RESPONSE
+      // =========================================
+
+      final dynamic response = await _apiService.getTasks(
+        username: username,
+      );
+
+      // =========================================
+      // GET COMPLETED TASKS
+      // =========================================
+
+      final dynamic completedResponse =
+          await _apiService.getTodayCompletedTasks(
+        username: username,
+      );
+
+      // =========================================
+      // PARSE COMPLETED RECORDS
+      // =========================================
+
+      List<dynamic> completedRecords = [];
+
+      if (completedResponse is List) {
+        completedRecords = completedResponse;
+      } else if (completedResponse is Map<String, dynamic>) {
+        if (completedResponse['data'] is List) {
+          completedRecords = completedResponse['data'];
+        }
+      }
+
+      // =========================================
+      // COMPLETED IDS
+      // =========================================
+
+      final Set<String> completedIds = completedRecords.map<String>((e) {
+        if (e is Map<String, dynamic>) {
+          return e['utedb_madb'].toString();
+        }
+
+        return "";
+      }).toSet();
+
+      // =========================================
+      // PARSE TASK RECORDS
+      // =========================================
+
+      List<dynamic> records = [];
+
+      // CASE 1 => DIRECT LIST
+      if (response is List) {
+        records = response;
+      }
+
+      // CASE 2 => MAP RESPONSE
+      else if (response is Map<String, dynamic>) {
+        // response -> response -> Records
+        if (response['response'] is Map<String, dynamic>) {
+          final nestedResponse = response['response'] as Map<String, dynamic>;
+
+          if (nestedResponse['Records'] is List) {
+            records = nestedResponse['Records'];
+          }
+        }
+
+        // response -> Records
+        else if (response['Records'] is List) {
+          records = response['Records'];
+        }
+
+        // response -> data
+        else if (response['data'] is List) {
+          records = response['data'];
+        }
+      }
+
+      // =========================================
+      // CREATE TASK MODELS
+      // =========================================
+
+      List<TaskModel> fetchedTasks = [];
+
+      for (final item in records) {
+        try {
+          if (item is Map<String, dynamic>) {
+            final task = TaskModel.fromJson(item);
+
+            // completed check
+            if (completedIds.contains(task.id.toString())) {
+              task.isCompleted = true;
+            }
+
+            fetchedTasks.add(task);
+          } else if (item is Map) {
+            final task = TaskModel.fromJson(
+              Map<String, dynamic>.from(item),
+            );
+
+            if (completedIds.contains(task.id.toString())) {
+              task.isCompleted = true;
+            }
+
+            fetchedTasks.add(task);
+          }
+        } catch (e) {
+          print("TASK PARSE ERROR => $e");
+        }
+      }
+
+      // =========================================
+      // SORT TASKS
+      // =========================================
+
+      fetchedTasks.sort((a, b) {
+        if (a.isCompleted == b.isCompleted) {
+          return 0;
+        }
+
+        return a.isCompleted ? 1 : -1;
+      });
+
+      tasks.assignAll(fetchedTasks);
+
+      // =========================================
+      // HIGHLIGHT INDEX
+      // =========================================
+
+      highlightedIndex.value = tasks.indexWhere(
+        (task) => !task.isCompleted,
+      );
+
+      if (highlightedIndex.value < 0) {
+        highlightedIndex.value = 0;
+      }
+    } catch (e) {
+      print("FETCH TASK ERROR => $e");
+
+      Get.snackbar(
+        "Error",
+        "Failed to load tasks",
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      if (showLoader) {
+        isLoading.value = false;
+      }
+    }
+  }
+
+  // =====================================================
+  // TOGGLE LANGUAGE
+  // =====================================================
+
+  void toggleLanguage() {
+    isHindi.value = !isHindi.value;
+  }
+
+  // =====================================================
+  // MANUAL PUNCH
+  // =====================================================
+
+  Future<void> handlePunchAction() async {
+    try {
+      isPunching.value = true;
+
+      final username = await StorageService.getUsername();
+
+      if (username == null || username.isEmpty) {
+        return;
+      }
+
+      final nextType = currentPunchStatus.value == "in" ? "Out" : "In";
+
+      // =========================================
+      // GET PREMISES
+      // =========================================
+
+      final premises = await _apiService.getPremises(
+        username: username,
+      );
+
+      if (premises.isEmpty) {
+        Get.snackbar(
+          "Error",
+          "No premises assigned",
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+
+        return;
+      }
+
+      // =========================================
+      // LOCATION VALIDATION
+      // =========================================
+
+      final insidePremise = await LocationService.validateUserInPremise(
+        premises,
+      );
+
+      if (!insidePremise) {
+        Get.defaultDialog(
+          title: "📍 Outside Premise",
+          middleText: "You are outside allowed location",
+          radius: 18,
+          confirm: ElevatedButton(
+            onPressed: () {
+              Get.back();
+            },
+            child: const Text("OK"),
+          ),
+        );
+
+        return;
+      }
+
+      // =========================================
+      // SUBMIT PUNCH
+      // =========================================
+
+      final success = await _apiService.submitPunch(
+        username: username,
+        type: nextType,
       );
 
       if (success) {
-        Get.snackbar("Attendance", "Punch $type recorded successfully!",
-            backgroundColor: Colors.green, colorText: Colors.white);
-      } else {
-        Get.snackbar("Error", "Failed to record punch.");
+        currentPunchStatus.value = nextType.toLowerCase();
+
+        Get.snackbar(
+          "Success",
+          nextType == "In"
+              ? "Punched In Successfully"
+              : "Punched Out Successfully",
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          margin: const EdgeInsets.all(12),
+          borderRadius: 14,
+        );
       }
     } catch (e) {
-      Get.snackbar("Error", "Something went wrong.");
+      print("PUNCH ERROR => $e");
+
+      Get.snackbar(
+        "Error",
+        "Attendance failed",
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
     } finally {
       isPunching.value = false;
     }
@@ -118,54 +416,239 @@ class DashboardController extends GetxController {
   // =====================================================
   // COMPLETE TASK
   // =====================================================
-  Future<void> completeTask(int index) async {
+
+  Future<void> completeTask(
+    TaskModel task,
+  ) async {
     try {
-      final username = await StorageService.getUsername();
-
-      // 1. Fetch premises for location validation
-      List<dynamic> premises =
-          await _apiService.getPremises(username: username);
-
-      // 2. Validate location with the premises list
-      bool insideRadius = await LocationService.canCompleteTask(premises);
-
-      if (!insideRadius) {
-        Get.snackbar("Location Error", "You are not at the required location.");
+      // already completed
+      if (task.isCompleted) {
         return;
       }
 
-      final response = await _apiService.completeTask(
-        username: username,
-        madbId: tasks[index].id,
+      // =========================================
+      // CHECK PUNCH
+      // =========================================
+
+      if (currentPunchStatus.value != "in") {
+        Get.snackbar(
+          "Punch Required",
+          "Please punch in first",
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+        );
+
+        return;
+      }
+
+      Get.dialog(
+        const Center(
+          child: CircularProgressIndicator(),
+        ),
+        barrierDismissible: false,
       );
 
+      final username = await StorageService.getUsername();
+
+      if (username == null || username.isEmpty) {
+        if (Get.isDialogOpen ?? false) {
+          Get.back();
+        }
+
+        return;
+      }
+
+      // =========================================
+      // VALIDATE LOCATION
+      // =========================================
+
+      final premises = await _apiService.getPremises(
+        username: username,
+      );
+
+      final insidePremise = await LocationService.validateUserInPremise(
+        premises,
+      );
+
+      if (!insidePremise) {
+        if (Get.isDialogOpen ?? false) {
+          Get.back();
+        }
+
+        Get.defaultDialog(
+          title: "📍 Location Error",
+          middleText: "Task can only be completed inside premise",
+        );
+
+        return;
+      }
+
+      // =========================================
+      // IMAGE TASK
+      // =========================================
+
+      File? imageFile;
+
+      if (task.howrMethod.toLowerCase().contains("upload") ||
+          task.howrMethod.toLowerCase().contains("image")) {
+        imageFile = await pickImage();
+
+        if (imageFile == null) {
+          if (Get.isDialogOpen ?? false) {
+            Get.back();
+          }
+
+          Get.snackbar(
+            "Image Required",
+            "Please upload proof image",
+            snackPosition: SnackPosition.TOP,
+            backgroundColor: Colors.orange,
+            colorText: Colors.white,
+          );
+
+          return;
+        }
+      }
+
+      // =========================================
+      // FORM TASK
+      // =========================================
+
+      if (task.howrType.toLowerCase().contains("form") &&
+          task.howrUrl.isNotEmpty) {
+        final Uri uri = Uri.parse(task.howrUrl);
+
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(
+            uri,
+            mode: LaunchMode.inAppBrowserView,
+          );
+        }
+      }
+
+      // =========================================
+      // COMPLETE TASK API
+      // =========================================
+
+      final response = await _apiService.completeTask(
+        username: username,
+        madbId: task.id.toString(),
+        imageFile: imageFile,
+      );
+
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+      }
+
       if (response != null &&
-          response['status'] == true &&
-          response['response']['Error'] == "0") {
-        tasks[index].isCompleted = true;
-        tasks.sort((a, b) => (a.isCompleted ? 1 : -1));
+          (response['status'] == true || response['success'] == true)) {
+        task.isCompleted = true;
+
         tasks.refresh();
-        highlightedIndex.value = tasks.indexWhere((t) => !t.isCompleted);
-        Get.snackbar("Success", "Task completed!");
+
+        // sort again
+        tasks.sort((a, b) {
+          if (a.isCompleted == b.isCompleted) {
+            return 0;
+          }
+
+          return a.isCompleted ? 1 : -1;
+        });
+
+        tasks.refresh();
+
+        Get.snackbar(
+          "✅ Task Completed",
+          "Task updated successfully",
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          margin: const EdgeInsets.all(12),
+          borderRadius: 14,
+        );
+      } else {
+        Get.snackbar(
+          "Error",
+          "Task completion failed",
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
       }
     } catch (e) {
-      Get.snackbar("Error", "Unable to complete task");
+      print("COMPLETE TASK ERROR => $e");
+
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+      }
+
+      Get.snackbar(
+        "Error",
+        "Failed to complete task",
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
     }
   }
 
-  void startTaskHighlighter() {
-    taskTimer?.cancel();
-    taskTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      if (tasks.isNotEmpty) {
-        int current = highlightedIndex.value;
-        highlightedIndex.value = (current + 1) % tasks.length;
+  // =====================================================
+  // PICK IMAGE
+  // =====================================================
+
+  Future<File?> pickImage() async {
+    try {
+      final picker = ImagePicker();
+
+      final pickedFile = await picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 60,
+      );
+
+      if (pickedFile == null) {
+        return null;
       }
-    });
+
+      return File(pickedFile.path);
+    } catch (e) {
+      print("IMAGE PICK ERROR => $e");
+
+      return null;
+    }
   }
+
+  // =====================================================
+  // HIGHLIGHT ANIMATION
+  // =====================================================
+
+  void startHighlightAnimation() {
+    highlightTimer?.cancel();
+
+    highlightTimer = Timer.periodic(
+      const Duration(seconds: 4),
+      (timer) {
+        if (tasks.isEmpty) {
+          return;
+        }
+
+        highlightedIndex.value++;
+
+        if (highlightedIndex.value >= tasks.length) {
+          highlightedIndex.value = 0;
+        }
+      },
+    );
+  }
+
+  // =====================================================
+  // DISPOSE
+  // =====================================================
 
   @override
   void onClose() {
-    taskTimer?.cancel();
+    highlightTimer?.cancel();
+
     super.onClose();
   }
 }
