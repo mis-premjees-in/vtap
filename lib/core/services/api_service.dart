@@ -68,6 +68,9 @@ class ApiService {
     } catch (e) {
       throw Exception("Login API Error: $e");
     }
+    print("USERNAME => $username");
+    print("PASSWORD => $password");
+    print("MD5 => $md5");
   }
 
   // =====================================================
@@ -97,34 +100,72 @@ class ApiService {
   // =====================================================
   // GET TASKS (Priority Logic with Pagination)
   // =====================================================
-  Future<Map<String, dynamic>> getTasks({required String username}) async {
+  // =====================================================
+// GET TASKS (Admin + User Wise Filtering)
+// =====================================================
+  Future<Map<String, dynamic>> getTasks({
+    required String username,
+  }) async {
     try {
       final token = await StorageService.getToken();
-      if (token.isEmpty) throw Exception("Token not found");
+
+      if (token.isEmpty) {
+        throw Exception("Token not found");
+      }
 
       List<dynamic> allRecords = [];
+
       int currentPage = 1;
       int totalPages = 1;
 
       do {
+        // ==========================================
+        // REQUEST DATA
+        // ==========================================
+        Map<String, dynamic> requestData = {
+          "table_name": "madb",
+          "username": username,
+          "access_token": token,
+          "page": currentPage,
+        };
+
+        // ==========================================
+        // NORMAL USERS => ONLY THEIR TASKS
+        // ADMIN => ALL TASKS
+        // ==========================================
+        if (username != "tm_premjees") {
+          requestData["custom_where"] = "whos_who2='$username'";
+        }
+
+        // ==========================================
+        // API CALL
+        // ==========================================
         final response = await dio.post(
           "get_table_data.php",
-          data: {
-            "table_name": "madb",
-            "username": username,
-            "custom_where": "whos_who2='$username'",
-            "access_token": token,
-            "page": currentPage,
-          },
+          data: requestData,
         );
 
         final data = Map<String, dynamic>.from(response.data);
-        if (data['status'] == true && data['response']['Error'] == "0") {
-          final responseData = data['response'];
-          final List records = responseData['Records'] ?? [];
+
+        print("TASK API RESPONSE => $data");
+
+        // ==========================================
+        // SUCCESS
+        // ==========================================
+        if (data['status'] == true &&
+            data['response'] != null &&
+            data['response']['Error'] == "0") {
+          final responseData = Map<String, dynamic>.from(data['response']);
+
+          final List<dynamic> records = responseData['Records'] ?? [];
+
           allRecords.addAll(records);
-          totalPages =
-              int.tryParse(responseData['Total_Pages'].toString()) ?? 1;
+
+          totalPages = int.tryParse(
+                responseData['Total_Pages'].toString(),
+              ) ??
+              1;
+
           currentPage++;
         } else {
           break;
@@ -139,8 +180,14 @@ class ApiService {
         }
       };
     } on DioException catch (e) {
-      throw Exception(e.response?.data.toString() ?? "Failed to fetch tasks");
+      print("GET TASKS DIO ERROR => ${e.response?.data}");
+
+      throw Exception(
+        e.response?.data.toString() ?? "Failed to fetch tasks",
+      );
     } catch (e) {
+      print("GET TASKS ERROR => $e");
+
       throw Exception("Task API Error: $e");
     }
   }

@@ -5,6 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../widgets/task_card.dart';
 import '../../../widgets/task_carousel_card.dart';
 import '../controllers/dashboard_controller.dart';
+import '../../../core/services/storage_service.dart';
 
 class DashboardView extends StatelessWidget {
   const DashboardView({super.key});
@@ -50,9 +51,33 @@ class DashboardView extends StatelessWidget {
                                   fontWeight: FontWeight.bold)),
                         ],
                       ),
-                      IconButton(
-                        onPressed: () => controller.fetchTasks(),
-                        icon: const Icon(Icons.refresh, color: Colors.white),
+                      Row(
+                        children: [
+                          IconButton(
+                            onPressed: () => controller.fetchTasks(),
+                            icon: const Icon(
+                              Icons.refresh,
+                              color: Colors.white,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () async {
+                              await StorageService.clearAll();
+
+                              Get.offAllNamed('/login');
+
+                              Get.snackbar(
+                                "Logout",
+                                "Logged out successfully",
+                                snackPosition: SnackPosition.BOTTOM,
+                              );
+                            },
+                            icon: const Icon(
+                              Icons.logout,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

@@ -55,9 +55,8 @@ class StorageService {
 
   // ================= LOGOUT =================
 
-  static Future<void> logout() async {
+  static Future<void> clearAll() async {
     final prefs = await SharedPreferences.getInstance();
-
     await prefs.clear();
   }
 }
