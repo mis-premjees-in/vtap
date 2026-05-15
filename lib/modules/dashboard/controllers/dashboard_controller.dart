@@ -39,7 +39,7 @@ class DashboardController extends GetxController {
 
       final response = await _apiService.getTasks(username: username);
 
-      if (response != null && response['status'] == true) {
+      if (response['status'] == true) {
         final List<dynamic> records = response['response']?['Records'] ?? [];
 
         final completedToday =
