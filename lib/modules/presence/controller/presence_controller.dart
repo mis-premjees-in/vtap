@@ -9,11 +9,6 @@ class PresenceController extends GetxController {
   var isLoading = false.obs;
   var lastStatus = "out".obs; // Current state: "in" or "out"
 
-  @override
-  void onInit() {
-    super.onInit();
-  }
-
   Future<void> fetchStatus(String username) async {
     isLoading.value = true;
     try {

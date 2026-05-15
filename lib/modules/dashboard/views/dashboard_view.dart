@@ -145,10 +145,12 @@ class DashboardView extends StatelessWidget {
 
             Expanded(
               child: Obx(() {
-                if (controller.isLoading.value)
+                if (controller.isLoading.value) {
                   return const Center(child: CircularProgressIndicator());
-                if (controller.tasks.isEmpty)
+                }
+                if (controller.tasks.isEmpty) {
                   return const Center(child: Text("No tasks found."));
+                }
 
                 if (controller.isCarousel.value) {
                   return PageView.builder(
