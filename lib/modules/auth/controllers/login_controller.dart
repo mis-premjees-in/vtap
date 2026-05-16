@@ -6,16 +6,14 @@ import 'package:get/get.dart';
 import '../../../core/services/storage_service.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../routes/app_routes.dart';
+import '../../../core/services/location_service.dart';
 
 class LoginController extends GetxController {
   final AuthRepository repository = AuthRepository();
-
   final TextEditingController usernameController = TextEditingController();
-
   final TextEditingController passwordController = TextEditingController();
 
   RxBool isLoading = false.obs;
-
   RxBool obscurePassword = true.obs;
 
   // =====================================================
@@ -32,74 +30,93 @@ class LoginController extends GetxController {
       );
 
       final data = response.data;
-
-      print("LOGIN RESPONSE => $data");
-
-      // =====================================================
-      // RESPONSE DATA
-      // =====================================================
-
       final responseData = data['response'] ?? {};
-
-      // =====================================================
-      // TOKEN
-      // =====================================================
-
       final token = responseData['Access_Token']?.toString() ?? '';
-
-      // =====================================================
-      // USER DATA
-      // =====================================================
-
       final userData = responseData['User_Data'] ?? {};
-
       final username =
           userData['memberID']?.toString() ?? usernameController.text.trim();
 
-      final userId = userData['memberID']?.toString() ?? '';
-
-      // =====================================================
-      // VALIDATION
-      // =====================================================
+      // final userId = userData['memberID']?.toString() ?? '';
+      final memberId = userData['memberID']?.toString() ?? '';
+      String whosId = "";
 
       if (token.isEmpty) {
-        throw Exception("Token missing from API");
+        throw Exception("Token missing");
       }
 
       // =====================================================
-      // SAVE LOGIN DATA
+      // SAVE LOGIN
       // =====================================================
 
       await StorageService.saveLoginData(
         token: token,
         username: username,
-        userId: userId,
+        userId: memberId,
+        whosId: whosId,
       );
 
-      print("TOKEN SAVED => $token");
+      // =====================================================
+      // FETCH WHOS ID FROM WHOS TABLE
+      // =====================================================
+      final whosResponse = await repository.apiService.getTableData(
+        tableName: "whos",
+        username: username,
+        customWhere: "whos_who2='${memberId.toUpperCase()}'",
+      );
+
+      if (whosResponse['response']?['Error'] == "0") {
+        final records = whosResponse['response']['Records'] as List;
+
+        if (records.isNotEmpty) {
+          whosId = records.first['whos_id']?.toString() ?? '';
+        }
+      }
+
+      print("MEMBER ID => $memberId");
+      print("WHOS ID => $whosId");
 
       // =====================================================
-      // SUCCESS MESSAGE
+      // FETCH PREMISES
       // =====================================================
 
+      final premises = await repository.apiService.getPremises(
+        username: username,
+      );
+
+      // =====================================================
+      // CHECK LOCATION
+      // =====================================================
+
+      final matchedPremise = await LocationService.getMatchedPremise(
+        premises,
+      );
+
+      // =====================================================
+// AUTO CHECK-IN
+// =====================================================
+
+      if (matchedPremise != null && whosId.isNotEmpty) {
+        final success = await repository.apiService.submitPunch(
+          username: username,
+          type: "In",
+          premiseId: matchedPremise['premises_id'].toString(),
+          whosId: whosId,
+        );
+
+        if (success) {
+          await StorageService.saveAttendance(
+            status: "in",
+            premiseName: matchedPremise['premises_name'].toString(),
+          );
+        }
+      }
       Get.snackbar(
-        "🎉 Welcome Back",
-        "Login successful boss 😎",
+        "Success",
+        "Login successful",
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green.shade600,
+        backgroundColor: Colors.green,
         colorText: Colors.white,
-        borderRadius: 18,
-        margin: const EdgeInsets.all(14),
-        icon: const Icon(
-          Icons.celebration,
-          color: Colors.white,
-        ),
-        duration: const Duration(seconds: 4),
       );
-
-      // =====================================================
-      // NAVIGATE
-      // =====================================================
 
       Get.offAllNamed(
         AppRoutes.dashboard,
@@ -108,17 +125,11 @@ class LoginController extends GetxController {
       print("LOGIN ERROR => $e");
 
       Get.snackbar(
-        "😵 Oops Login Failed",
-        "Username ya password galat hai 😅",
+        "Login Failed",
+        e.toString(),
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red.shade400,
+        backgroundColor: Colors.red,
         colorText: Colors.white,
-        borderRadius: 18,
-        margin: const EdgeInsets.all(14),
-        icon: const Icon(
-          Icons.error_outline,
-          color: Colors.white,
-        ),
       );
     } finally {
       isLoading.value = false;

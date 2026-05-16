@@ -150,9 +150,9 @@ class LoginView extends StatelessWidget {
                         children: [
                           // ================= HEADER =================
 
-                          Row(
+                          const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
+                            children: [
                               Icon(
                                 Icons.lock_outline_rounded,
                                 color: AppColors.primary,

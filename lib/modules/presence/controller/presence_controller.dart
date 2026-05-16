@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 
 import '../../../core/services/api_service.dart';
 import '../../../core/services/location_service.dart';
+import '../../../core/services/storage_service.dart';
 
 class PresenceController extends GetxController {
   final ApiService _api = ApiService();
@@ -41,13 +42,9 @@ class PresenceController extends GetxController {
     try {
       isLoading.value = true;
 
-      // NEXT TYPE
       String nextType = lastStatus.value == "in" ? "out" : "in";
 
-      // =========================================
       // GET PREMISES
-      // =========================================
-
       List premises = await _api.getPremises(
         username: username,
       );
@@ -61,15 +58,12 @@ class PresenceController extends GetxController {
         return;
       }
 
-      // =========================================
       // LOCATION VALIDATION
-      // =========================================
-
-      bool isWithinPremise = await LocationService.validateUserInPremise(
+      final matchedPremise = await LocationService.getMatchedPremise(
         premises,
       );
 
-      if (!isWithinPremise) {
+      if (matchedPremise == null) {
         Get.defaultDialog(
           title: "📍 Outside Premise",
           middleText: "Pehle valid shop/location pe aajao 😅",
@@ -81,13 +75,14 @@ class PresenceController extends GetxController {
         return;
       }
 
-      // =========================================
-      // SUBMIT PUNCH
-      // =========================================
+      final whosId = await StorageService.getWhosId();
 
+// SUBMIT PUNCH
       bool success = await _api.submitPunch(
         username: username,
         type: nextType,
+        premiseId: matchedPremise['premises_id'].toString(),
+        whosId: whosId,
       );
 
       if (success) {

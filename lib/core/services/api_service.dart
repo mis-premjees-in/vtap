@@ -11,17 +11,27 @@ class ApiService {
 
   static const String baseUrl = "https://tm.premjees.in/api/";
 
+  static const String authUrl = "auth.php";
+  static const String getTableDataUrl = "get_table_data.php";
+  static const String createRecordUrl = "create_record.php";
+
   ApiService() {
     dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
         connectTimeout: const Duration(seconds: 30),
         receiveTimeout: const Duration(seconds: 30),
+        sendTimeout: const Duration(seconds: 30),
         headers: {
           "Content-Type": "application/json",
+          "Accept": "application/json",
         },
       ),
     );
+
+    // =====================================================
+    // TOKEN INTERCEPTOR
+    // =====================================================
 
     dio.interceptors.add(
       InterceptorsWrapper(
@@ -34,15 +44,55 @@ class ApiService {
 
           handler.next(options);
         },
+        onError: (error, handler) {
+          print("API ERROR => ${error.message}");
+          print("API RESPONSE => ${error.response?.data}");
+
+          handler.next(error);
+        },
       ),
     );
+
+    // =====================================================
+    // LOGGING
+    // =====================================================
 
     dio.interceptors.add(
       LogInterceptor(
         requestBody: true,
         responseBody: true,
+        requestHeader: false,
       ),
     );
+  }
+
+  // =====================================================
+  // COMMON ERROR HANDLER
+  // =====================================================
+
+  Exception handleError(dynamic e) {
+    if (e is DioException) {
+      switch (e.type) {
+        case DioExceptionType.connectionTimeout:
+          return Exception("Connection timeout");
+
+        case DioExceptionType.receiveTimeout:
+          return Exception("Server taking too long to respond");
+
+        case DioExceptionType.connectionError:
+          return Exception("No internet connection");
+
+        case DioExceptionType.badResponse:
+          return Exception(
+            e.response?.data.toString() ?? "Server error",
+          );
+
+        default:
+          return Exception("Something went wrong");
+      }
+    }
+
+    return Exception(e.toString());
   }
 
   // =====================================================
@@ -56,7 +106,7 @@ class ApiService {
   }) async {
     try {
       final response = await dio.post(
-        "auth.php",
+        authUrl,
         data: {
           "username": username,
           "password": password,
@@ -65,10 +115,40 @@ class ApiService {
       );
 
       return Map<String, dynamic>.from(response.data);
-    } on DioException catch (e) {
-      throw Exception(
-        e.response?.data.toString() ?? "Internet connection problem",
+    } catch (e) {
+      throw handleError(e);
+    }
+  }
+
+  // =====================================================
+  // COMMON TABLE FETCH
+  // =====================================================
+
+  Future<Map<String, dynamic>> getTableData({
+    required String tableName,
+    required String username,
+    String? access_token,
+    String? customWhere,
+    int pageNumber = 1,
+  }) async {
+    try {
+      final token = access_token ?? await StorageService.getToken();
+
+      final response = await dio.post(
+        getTableDataUrl,
+        data: {
+          "username": username,
+          "table_name": tableName,
+          "access_token": token,
+          "page_number": pageNumber,
+          if (customWhere != null && customWhere.trim().isNotEmpty)
+            "custom_where": customWhere,
+        },
       );
+
+      return Map<String, dynamic>.from(response.data);
+    } catch (e) {
+      throw handleError(e);
     }
   }
 
@@ -80,23 +160,19 @@ class ApiService {
     required String username,
   }) async {
     try {
-      final token = await StorageService.getToken();
-
-      final response = await dio.post(
-        "get_table_data.php",
-        data: {
-          "username": username,
-          "table_name": "premises",
-          "access_token": token,
-        },
+      final response = await getTableData(
+        tableName: "premises",
+        username: username,
       );
 
-      if (response.data['status'] == true) {
-        return response.data['response']['Records'] ?? [];
+      if (response['status'] == true && response['response']?['Error'] == "0") {
+        return response['response']['Records'] ?? [];
       }
 
       return [];
     } catch (e) {
+      print("GET PREMISES ERROR => $e");
+
       return [];
     }
   }
@@ -109,38 +185,28 @@ class ApiService {
     required String username,
   }) async {
     try {
-      final token = await StorageService.getToken();
-
       List<dynamic> allTasks = [];
 
       int page = 1;
       int totalPages = 1;
 
       do {
-        Map<String, dynamic> data = {
-          "username": username,
-          "table_name": "madb",
-          "access_token": token,
-          "page": page,
-        };
-
-        if (username != "tm_premjees") {
-          data["custom_where"] = "whos_who2='$username'";
-        }
-
-        final response = await dio.post(
-          "get_table_data.php",
-          data: data,
+        final response = await getTableData(
+          tableName: "madb",
+          username: username,
+          pageNumber: page,
+          customWhere:
+              username != "tm_premjees" ? "whos_who2='$username'" : null,
         );
 
-        if (response.data['status'] == true &&
-            response.data['response']['Error'] == "0") {
-          final records = response.data['response']['Records'] ?? [];
+        if (response['status'] == true &&
+            response['response']?['Error'] == "0") {
+          final records = response['response']['Records'] ?? [];
 
           allTasks.addAll(records);
 
           totalPages = int.tryParse(
-                response.data['response']['Total_Pages'].toString(),
+                response['response']['Total_Pages'].toString(),
               ) ??
               1;
 
@@ -152,36 +218,39 @@ class ApiService {
 
       return allTasks;
     } catch (e) {
+      print("GET TASKS ERROR => $e");
+
       throw Exception("Failed to load tasks");
     }
   }
 
   // =====================================================
-  // GET COMPLETED TASKS
+  // GET TODAY COMPLETED TASKS
   // =====================================================
 
   Future<List<dynamic>> getTodayCompletedTasks({
     required String username,
   }) async {
     try {
-      final token = await StorageService.getToken();
+      final now = DateTime.now();
 
-      final response = await dio.post(
-        "get_table_data.php",
-        data: {
-          "username": username,
-          "table_name": "utedb",
-          "access_token": token,
-        },
+      final today =
+          "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+
+      final response = await getTableData(
+        tableName: "utedb",
+        username: username,
+        customWhere: "whos_who2='$username' AND DATE(utedb_created)='$today'",
       );
 
-      if (response.data['status'] == true &&
-          response.data['response']['Error'] == "0") {
-        return response.data['response']['Records'] ?? [];
+      if (response['status'] == true && response['response']?['Error'] == "0") {
+        return response['response']['Records'] ?? [];
       }
 
       return [];
     } catch (e) {
+      print("COMPLETED TASK ERROR => $e");
+
       return [];
     }
   }
@@ -194,19 +263,14 @@ class ApiService {
     required String username,
   }) async {
     try {
-      final token = await StorageService.getToken();
-
-      final response = await dio.post(
-        "get_table_data.php",
-        data: {
-          "username": username,
-          "table_name": "pnb",
-          "access_token": token,
-        },
+      final response = await getTableData(
+        tableName: "pnb",
+        username: username,
+        customWhere: "whos_who2='$username'",
       );
 
-      if (response.data['status'] == true) {
-        final records = response.data['response']['Records'] ?? [];
+      if (response['status'] == true && response['response']?['Error'] == "0") {
+        final records = response['response']['Records'] ?? [];
 
         if (records.isNotEmpty) {
           return records.first['pnb_type']?.toString().toLowerCase() ?? "out";
@@ -215,6 +279,8 @@ class ApiService {
 
       return "out";
     } catch (e) {
+      print("PUNCH STATUS ERROR => $e");
+
       return "out";
     }
   }
@@ -226,25 +292,32 @@ class ApiService {
   Future<bool> submitPunch({
     required String username,
     required String type,
+    required String premiseId,
+    required String whosId,
   }) async {
     try {
       final token = await StorageService.getToken();
 
       final response = await dio.post(
-        "create_record.php",
+        createRecordUrl,
         data: {
-          "username": username,
           "table_name": "pnb",
+          "username": username,
           "access_token": token,
           "data": {
             "pnb_type": type,
+            "pnb_premises_id": premiseId,
+            "pnb_whos_id": whosId,
           },
         },
       );
 
-      return response.data['status'] == true &&
-          response.data['response']['Error'] == "0";
+      print("PUNCH RESPONSE => ${response.data}");
+
+      return response.data['status'] == true;
     } catch (e) {
+      print("PUNCH ERROR => $e");
+
       return false;
     }
   }
@@ -256,6 +329,8 @@ class ApiService {
   Future<Map<String, dynamic>> completeTask({
     required String username,
     required String madbId,
+    required String premiseId,
+    // required String userId,
     File? imageFile,
   }) async {
     try {
@@ -265,27 +340,31 @@ class ApiService {
         "username": username,
         "table_name": "utedb",
         "access_token": token,
-        "data": {
-          "utedb_madb": madbId,
-        },
+        "utedb_madb": madbId,
+        "utedb_premises_id": premiseId,
       });
+      print(formData);
+
+      // =====================================================
+      // IMAGE
+      // =====================================================
 
       if (imageFile != null) {
-        File compressed = await compressImage(imageFile);
+        final compressedImage = await compressImage(imageFile);
 
         formData.files.add(
           MapEntry(
             "proof_image",
             await MultipartFile.fromFile(
-              compressed.path,
-              filename: compressed.path.split('/').last,
+              compressedImage.path,
+              filename: compressedImage.path.split('/').last,
             ),
           ),
         );
       }
 
       final response = await dio.post(
-        "create_record.php",
+        createRecordUrl,
         data: formData,
         options: Options(
           headers: {
@@ -294,9 +373,13 @@ class ApiService {
         ),
       );
 
-      return Map<String, dynamic>.from(response.data);
+      return Map<String, dynamic>.from(
+        response.data,
+      );
     } catch (e) {
-      throw Exception("Task complete failed");
+      print("COMPLETE TASK ERROR => $e");
+
+      throw Exception("Task completion failed");
     }
   }
 
@@ -305,17 +388,27 @@ class ApiService {
   // =====================================================
 
   Future<File> compressImage(File file) async {
-    final dir = await getTemporaryDirectory();
+    try {
+      final dir = await getTemporaryDirectory();
 
-    final targetPath =
-        "${dir.path}/${DateTime.now().millisecondsSinceEpoch}.jpg";
+      final targetPath =
+          "${dir.path}/${DateTime.now().millisecondsSinceEpoch}.jpg";
 
-    final compressed = await FlutterImageCompress.compressAndGetFile(
-      file.absolute.path,
-      targetPath,
-      quality: 45,
-    );
+      final compressed = await FlutterImageCompress.compressAndGetFile(
+        file.absolute.path,
+        targetPath,
+        quality: 45,
+      );
 
-    return File(compressed!.path);
+      if (compressed == null) {
+        return file;
+      }
+
+      return File(compressed.path);
+    } catch (e) {
+      print("IMAGE COMPRESS ERROR => $e");
+
+      return file;
+    }
   }
 }

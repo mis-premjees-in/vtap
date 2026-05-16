@@ -31,6 +31,7 @@ class DashboardController extends GetxController {
   RxInt highlightedIndex = 0.obs;
 
   RxList<TaskModel> tasks = <TaskModel>[].obs;
+  RxSet<String> completingTasks = <String>{}.obs;
 
   Timer? highlightTimer;
 
@@ -67,7 +68,7 @@ class DashboardController extends GetxController {
     try {
       final username = await StorageService.getUsername();
 
-      if (username == null || username.isEmpty) {
+      if (username.isEmpty) {
         return;
       }
 
@@ -84,21 +85,31 @@ class DashboardController extends GetxController {
         return;
       }
 
-      final isInside = await LocationService.validateUserInPremise(
+      final matchedPremise = await LocationService.getMatchedPremise(
         premises,
       );
+      print("MATCHED PREMISE => $matchedPremise");
 
-      if (!isInside) {
+      if (matchedPremise == null) {
         return;
       }
+
+      final whosId = await StorageService.getWhosId();
 
       final success = await _apiService.submitPunch(
         username: username,
         type: "In",
+        premiseId: matchedPremise['premises_id'].toString(),
+        whosId: whosId,
       );
 
       if (success) {
         currentPunchStatus.value = "in";
+
+        await StorageService.saveAttendance(
+          status: "in",
+          premiseName: matchedPremise['premises_name'].toString(),
+        );
 
         Get.snackbar(
           "🎉 Auto Punch In",
@@ -123,7 +134,7 @@ class DashboardController extends GetxController {
     try {
       final username = await StorageService.getUsername();
 
-      if (username == null || username.isEmpty) {
+      if (username.isEmpty) {
         return;
       }
 
@@ -151,7 +162,7 @@ class DashboardController extends GetxController {
 
       final username = await StorageService.getUsername();
 
-      if (username == null || username.isEmpty) {
+      if (username.isEmpty) {
         return;
       }
 
@@ -190,13 +201,31 @@ class DashboardController extends GetxController {
       // COMPLETED IDS
       // =========================================
 
-      final Set<String> completedIds = completedRecords.map<String>((e) {
-        if (e is Map<String, dynamic>) {
-          return e['utedb_madb'].toString();
-        }
+      final now = DateTime.now();
 
-        return "";
-      }).toSet();
+      final Set<String> completedIds = {};
+
+      for (final e in completedRecords) {
+        try {
+          if (e is Map<String, dynamic>) {
+            final created = DateTime.tryParse(
+              e['utedb_created'].toString(),
+            );
+
+            if (created == null) continue;
+
+            final isToday = created.year == now.year &&
+                created.month == now.month &&
+                created.day == now.day;
+
+            if (isToday) {
+              completedIds.add(
+                e['utedb_madb'].toString(),
+              );
+            }
+          }
+        } catch (_) {}
+      }
 
       // =========================================
       // PARSE TASK RECORDS
@@ -324,7 +353,7 @@ class DashboardController extends GetxController {
 
       final username = await StorageService.getUsername();
 
-      if (username == null || username.isEmpty) {
+      if (username.isEmpty) {
         return;
       }
 
@@ -354,11 +383,11 @@ class DashboardController extends GetxController {
       // LOCATION VALIDATION
       // =========================================
 
-      final insidePremise = await LocationService.validateUserInPremise(
+      final matchedPremise = await LocationService.getMatchedPremise(
         premises,
       );
 
-      if (!insidePremise) {
+      if (matchedPremise == null) {
         Get.defaultDialog(
           title: "📍 Outside Premise",
           middleText: "You are outside allowed location",
@@ -378,14 +407,22 @@ class DashboardController extends GetxController {
       // SUBMIT PUNCH
       // =========================================
 
+      final whosId = await StorageService.getWhosId();
+
       final success = await _apiService.submitPunch(
         username: username,
         type: nextType,
+        premiseId: matchedPremise['premises_id'].toString(),
+        whosId: whosId,
       );
 
       if (success) {
         currentPunchStatus.value = nextType.toLowerCase();
 
+        await StorageService.saveAttendance(
+          status: nextType.toLowerCase(),
+          premiseName: matchedPremise['premises_name'].toString(),
+        );
         Get.snackbar(
           "Success",
           nextType == "In"
@@ -422,10 +459,11 @@ class DashboardController extends GetxController {
   ) async {
     try {
       // already completed
-      if (task.isCompleted) {
+      if (task.isCompleted || completingTasks.contains(task.id)) {
         return;
       }
 
+      completingTasks.add(task.id);
       // =========================================
       // CHECK PUNCH
       // =========================================
@@ -451,7 +489,7 @@ class DashboardController extends GetxController {
 
       final username = await StorageService.getUsername();
 
-      if (username == null || username.isEmpty) {
+      if (username.isEmpty) {
         if (Get.isDialogOpen ?? false) {
           Get.back();
         }
@@ -467,18 +505,18 @@ class DashboardController extends GetxController {
         username: username,
       );
 
-      final insidePremise = await LocationService.validateUserInPremise(
+      final matchedPremise = await LocationService.getMatchedPremise(
         premises,
       );
 
-      if (!insidePremise) {
+      if (matchedPremise == null) {
         if (Get.isDialogOpen ?? false) {
           Get.back();
         }
 
         Get.defaultDialog(
           title: "📍 Location Error",
-          middleText: "Task can only be completed inside premise",
+          middleText: "Aap allowed premises se bahar hain",
         );
 
         return;
@@ -531,18 +569,21 @@ class DashboardController extends GetxController {
       // COMPLETE TASK API
       // =========================================
 
+      // final whosId = await StorageService.getWhosId();
+
       final response = await _apiService.completeTask(
         username: username,
         madbId: task.id.toString(),
-        imageFile: imageFile,
+        premiseId: matchedPremise['premises_id'].toString(),
+        // userId: whosId,
+        // imageFile: imageFile,
       );
 
       if (Get.isDialogOpen ?? false) {
         Get.back();
       }
 
-      if (response != null &&
-          (response['status'] == true || response['success'] == true)) {
+      if ((response['status'] == true || response['success'] == true)) {
         task.isCompleted = true;
 
         tasks.refresh();
@@ -632,9 +673,23 @@ class DashboardController extends GetxController {
           return;
         }
 
+        final pendingTasks = tasks.where((e) => !e.isCompleted).toList();
+
+        if (pendingTasks.isEmpty) {
+          highlightedIndex.value = 0;
+          return;
+        }
+
+        final currentTaskId =
+            pendingTasks[highlightedIndex.value % pendingTasks.length].id;
+
+        highlightedIndex.value = tasks.indexWhere(
+          (e) => e.id == currentTaskId,
+        );
+
         highlightedIndex.value++;
 
-        if (highlightedIndex.value >= tasks.length) {
+        if (highlightedIndex.value >= pendingTasks.length) {
           highlightedIndex.value = 0;
         }
       },
