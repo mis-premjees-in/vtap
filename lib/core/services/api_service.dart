@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -336,43 +337,84 @@ class ApiService {
     try {
       final token = await StorageService.getToken();
 
-      FormData formData = FormData.fromMap({
-        "username": username,
-        "table_name": "utedb",
-        "access_token": token,
-        "utedb_madb": madbId,
-        "utedb_premises_id": premiseId,
-      });
-      print(formData);
+      // FormData formData = FormData.fromMap({
+      //   "username": username,
+      //   "table_name": "utedb",
+      //   "access_token": token,
+      //   "data": {"utedb_madb": madbId, "utedb_premises_id": premiseId}
+      // });
 
-      // =====================================================
-      // IMAGE
-      // =====================================================
+      // print(jsonEncode(formData));
 
+      // // =====================================================
+      // // IMAGE
+      // // =====================================================
+
+      // if (imageFile != null) {
+      //   final compressedImage = await compressImage(imageFile);
+
+      //   formData.files.add(
+      //     MapEntry(
+      //       "proof_image",
+      //       await MultipartFile.fromFile(
+      //         compressedImage.path,
+      //         filename: compressedImage.path.split('/').last,
+      //       ),
+      //     ),
+      //   );
+      // }
+
+      // final response = await dio.post(
+      //   createRecordUrl,
+      //   data: jsonEncode(formData),
+      //   options: Options(
+      //     headers: {
+      //       "Content-Type": "multipart/form-data",
+      //     },
+      //   ),
+      // );
+
+      // 1. Create your FormData with the nested map JSON-encoded (highly recommended for APIs)
+      // 1. Convert ONLY the nested map to a JSON string
+      // 1. Prepare your base payload variables
+      String base64Image = "";
+
+// =====================================================
+// IMAGE TO BASE64 CONVERSION
+// =====================================================
       if (imageFile != null) {
         final compressedImage = await compressImage(imageFile);
 
-        formData.files.add(
-          MapEntry(
-            "proof_image",
-            await MultipartFile.fromFile(
-              compressedImage.path,
-              filename: compressedImage.path.split('/').last,
-            ),
-          ),
-        );
+        // Read the compressed image file bytes
+        List<int> imageBytes = await compressedImage.readAsBytes();
+
+        // Convert bytes to a Base64 string
+        base64Image = base64Encode(imageBytes);
       }
 
+// 2. Build a normal Map (NOT FormData)
+      Map<String, dynamic> requestPayload = {
+        "username": username,
+        "table_name": "utedb",
+        "access_token": token,
+        "data": {"utedb_madb": madbId, "utedb_premises_id": premiseId},
+        "proof_image": base64Image // This is now a long text string
+      };
+
+// Debug print your payload as a clean JSON string
+      print("Sending JSON -> ${jsonEncode(requestPayload)}");
+
+// 3. Send it as raw JSON via Dio
       final response = await dio.post(
         createRecordUrl,
-        data: formData,
+        data:
+            jsonEncode(requestPayload), // Yes! Now you CAN use jsonEncode here
         options: Options(
           headers: {
-            "Content-Type": "multipart/form-data",
+            "Content-Type": "application/json", // Explicitly JSON now
           },
         ),
       );
-
       return Map<String, dynamic>.from(
         response.data,
       );
