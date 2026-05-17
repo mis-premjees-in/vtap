@@ -11,6 +11,7 @@ class TaskModel {
   final String which;
 
   final String who;
+  final String hows;
 
   final String howrMethod;
   final String howrType;
@@ -28,6 +29,7 @@ class TaskModel {
     required this.where,
     required this.which,
     required this.who,
+    required this.hows,
     required this.howrMethod,
     required this.howrType,
     required this.howrUrl,
@@ -46,6 +48,7 @@ class TaskModel {
           .trim(),
       which: json['whichs_which1'] ?? "",
       who: json['whos_who2'] ?? "",
+      hows: json['howss_hows1']?.toString() ?? "",
       howrMethod: json['howrs_howr1'] ?? "",
       howrType: json['howrs_howr2'] ?? "",
       howrUrl: json['howrs_howr3'] ?? "",

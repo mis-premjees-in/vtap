@@ -4,11 +4,13 @@ import '../data/models/task_model.dart';
 class FloatingTaskPopup extends StatelessWidget {
   final TaskModel task;
   final VoidCallback onComplete;
+  final bool isHindi;
 
   const FloatingTaskPopup({
     super.key,
     required this.task,
     required this.onComplete,
+    required this.isHindi,
   });
 
   @override
@@ -30,12 +32,12 @@ class FloatingTaskPopup extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
                 children: [
                   Icon(Icons.notifications_active, color: Colors.white),
                   SizedBox(width: 10),
                   Text(
-                    "Task Reminder",
+                    isHindi ? "टास्क रिमाइंडर" : "Task Reminder",
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -45,7 +47,7 @@ class FloatingTaskPopup extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               Text(
-                task.taskEnglish,
+                isHindi ? task.taskHindi : task.taskEnglish,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 18,
@@ -68,8 +70,8 @@ class FloatingTaskPopup extends StatelessWidget {
                     backgroundColor: Colors.white,
                     foregroundColor: Colors.deepOrange,
                   ),
-                  child: const Text(
-                    "COMPLETE TASK",
+                  child: Text(
+                    isHindi ? "टास्क पूरा करें" : "COMPLETE TASK",
                   ),
                 ),
               ),

@@ -14,9 +14,9 @@ import '../../../data/models/task_model.dart';
 class DashboardController extends GetxController {
   final ApiService _apiService = ApiService();
 
-  // =====================================================
+  // =========================================================
   // STATES
-  // =====================================================
+  // =========================================================
 
   RxBool isLoading = false.obs;
 
@@ -32,11 +32,17 @@ class DashboardController extends GetxController {
 
   RxSet<String> completingTasks = <String>{}.obs;
 
+  Rx<TaskModel?> reminderTask = Rx<TaskModel?>(null);
+
   Timer? highlightTimer;
 
-  // =====================================================
+  Timer? reminderTimer;
+
+  bool autoPunchSnackbarShown = false;
+
+  // =========================================================
   // INIT
-  // =====================================================
+  // =========================================================
 
   @override
   void onInit() {
@@ -45,38 +51,57 @@ class DashboardController extends GetxController {
     loadInitialData();
 
     startHighlightAnimation();
+
+    startReminderChecker();
   }
 
-  // =====================================================
+  // =========================================================
   // LOAD INITIAL DATA
-  // =====================================================
+  // =========================================================
 
   Future<void> loadInitialData() async {
     await loadPunchStatus();
 
-    Future.delayed(
-      const Duration(milliseconds: 800),
-      () async {
-        await autoPunchInIfInsidePremise();
-      },
+    await Future.delayed(
+      const Duration(milliseconds: 1200),
     );
+
+    await autoPunchInIfInsidePremise();
 
     await fetchTasks();
   }
 
-  // =====================================================
+  // =========================================================
   // AUTO PUNCH
-  // =====================================================
+  // =========================================================
 
   Future<void> autoPunchInIfInsidePremise() async {
     try {
       final username = await StorageService.getUsername();
 
-      if (username.isEmpty) {
-        return;
-      }
+      if (username.isEmpty) return;
 
       if (currentPunchStatus.value == "in") {
+        if (!autoPunchSnackbarShown) {
+          autoPunchSnackbarShown = true;
+
+          Future.delayed(
+            const Duration(milliseconds: 500),
+            () {
+              Get.snackbar(
+                "🟢 Already Punched In",
+                "Attendance already marked",
+                snackPosition: SnackPosition.TOP,
+                backgroundColor: Colors.green,
+                colorText: Colors.white,
+                margin: const EdgeInsets.all(12),
+                borderRadius: 14,
+                duration: const Duration(seconds: 3),
+              );
+            },
+          );
+        }
+
         return;
       }
 
@@ -84,17 +109,13 @@ class DashboardController extends GetxController {
         username: username,
       );
 
-      if (premises.isEmpty) {
-        return;
-      }
+      if (premises.isEmpty) return;
 
       final matchedPremise = await LocationService.getMatchedPremise(
         premises,
       );
 
-      if (matchedPremise == null) {
-        return;
-      }
+      if (matchedPremise == null) return;
 
       final whosId = await StorageService.getWhosId();
 
@@ -105,6 +126,8 @@ class DashboardController extends GetxController {
         whosId: whosId,
       );
 
+      print("AUTO PUNCH SUCCESS => $success");
+
       if (success) {
         currentPunchStatus.value = "in";
 
@@ -113,12 +136,20 @@ class DashboardController extends GetxController {
           premiseName: matchedPremise['premises_name'].toString(),
         );
 
-        Get.snackbar(
-          "🎉 Auto Punch In",
-          "Attendance marked successfully",
-          snackPosition: SnackPosition.TOP,
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
+        Future.delayed(
+          const Duration(milliseconds: 600),
+          () {
+            Get.snackbar(
+              "🎉 Auto Punch In",
+              "Attendance marked at ${matchedPremise['premises_name']}",
+              snackPosition: SnackPosition.TOP,
+              backgroundColor: Colors.green,
+              colorText: Colors.white,
+              margin: const EdgeInsets.all(12),
+              borderRadius: 14,
+              duration: const Duration(seconds: 4),
+            );
+          },
         );
       }
     } catch (e) {
@@ -126,17 +157,15 @@ class DashboardController extends GetxController {
     }
   }
 
-  // =====================================================
+  // =========================================================
   // LOAD PUNCH STATUS
-  // =====================================================
+  // =========================================================
 
   Future<void> loadPunchStatus() async {
     try {
       final username = await StorageService.getUsername();
 
-      if (username.isEmpty) {
-        return;
-      }
+      if (username.isEmpty) return;
 
       final status = await _apiService.getLastPunchStatus(
         username: username,
@@ -148,9 +177,9 @@ class DashboardController extends GetxController {
     }
   }
 
-  // =====================================================
+  // =========================================================
   // FETCH TASKS
-  // =====================================================
+  // =========================================================
 
   Future<void> fetchTasks({
     bool showLoader = true,
@@ -162,9 +191,7 @@ class DashboardController extends GetxController {
 
       final username = await StorageService.getUsername();
 
-      if (username.isEmpty) {
-        return;
-      }
+      if (username.isEmpty) return;
 
       final dynamic response = await _apiService.getTasks(
         username: username,
@@ -176,7 +203,7 @@ class DashboardController extends GetxController {
       );
 
       // =====================================================
-      // COMPLETED TASK IDS
+      // COMPLETED IDS
       // =====================================================
 
       List<dynamic> completedRecords = [];
@@ -189,28 +216,26 @@ class DashboardController extends GetxController {
         }
       }
 
-      final now = DateTime.now();
-
       final Set<String> completedIds = {};
 
-      for (final e in completedRecords) {
+      final now = DateTime.now();
+
+      for (final item in completedRecords) {
         try {
-          if (e is Map<String, dynamic>) {
-            final created = DateTime.tryParse(
-              e['utedb_created'].toString(),
+          final created = DateTime.tryParse(
+            item['utedb_created'].toString(),
+          );
+
+          if (created == null) continue;
+
+          final isToday = created.year == now.year &&
+              created.month == now.month &&
+              created.day == now.day;
+
+          if (isToday) {
+            completedIds.add(
+              item['utedb_madb'].toString(),
             );
-
-            if (created == null) continue;
-
-            final isToday = created.year == now.year &&
-                created.month == now.month &&
-                created.day == now.day;
-
-            if (isToday) {
-              completedIds.add(
-                e['utedb_madb'].toString(),
-              );
-            }
           }
         } catch (_) {}
       }
@@ -230,8 +255,6 @@ class DashboardController extends GetxController {
           if (nested['Records'] is List) {
             records = nested['Records'];
           }
-        } else if (response['Records'] is List) {
-          records = response['Records'];
         }
       }
 
@@ -257,10 +280,6 @@ class DashboardController extends GetxController {
         }
       }
 
-      // =====================================================
-      // SORT TASKS
-      // =====================================================
-
       fetchedTasks.sort((a, b) {
         if (a.isCompleted == b.isCompleted) {
           return 0;
@@ -271,8 +290,10 @@ class DashboardController extends GetxController {
 
       tasks.assignAll(fetchedTasks);
 
+      updateReminderTask();
+
       highlightedIndex.value = tasks.indexWhere(
-        (task) => !task.isCompleted,
+        (e) => !e.isCompleted,
       );
 
       if (highlightedIndex.value < 0) {
@@ -289,53 +310,86 @@ class DashboardController extends GetxController {
         colorText: Colors.white,
       );
     } finally {
-      if (showLoader) {
-        isLoading.value = false;
-      }
+      isLoading.value = false;
     }
   }
 
-  // =====================================================
+  // =========================================================
   // LANGUAGE
-  // =====================================================
+  // =========================================================
 
   void toggleLanguage() {
-    isHindi.value = !isHindi.value;
+    isHindi.toggle();
+
+    update();
   }
 
-  // =====================================================
-  // GET CURRENT REMINDER TASK
-  // =====================================================
+  // =========================================================
+  // REMINDER POPUP
+  // =========================================================
+
+  void startReminderChecker() {
+    reminderTimer?.cancel();
+
+    reminderTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (timer) {
+        updateReminderTask();
+      },
+    );
+
+    updateReminderTask();
+  }
+
+  void updateReminderTask() {
+    reminderTask.value = getCurrentReminderTask();
+  }
 
   TaskModel? getCurrentReminderTask() {
     try {
-      final now = TimeOfDay.now();
+      final now = DateTime.now();
 
       for (final task in tasks) {
         if (task.isCompleted) continue;
 
-        final parts = task.whenTime.split(":");
+        final time = task.whenTime;
 
-        if (parts.length < 2) continue;
+        if (time.isEmpty) continue;
 
-        final hour = int.tryParse(parts[0]) ?? 0;
+        final split = time.split(":");
 
-        final minute = int.tryParse(parts[1]) ?? 0;
+        if (split.length < 2) continue;
 
-        if (hour == now.hour && (now.minute - minute).abs() <= 15) {
+        final hour = int.tryParse(split[0]) ?? 0;
+
+        final minute = int.tryParse(split[1]) ?? 0;
+
+        final taskDateTime = DateTime(
+          now.year,
+          now.month,
+          now.day,
+          hour,
+          minute,
+        );
+
+        final diff = now.difference(taskDateTime).inMinutes.abs();
+
+        if (diff <= 15) {
           return task;
         }
       }
 
       return null;
     } catch (e) {
+      print("REMINDER ERROR => $e");
+
       return null;
     }
   }
 
-  // =====================================================
+  // =========================================================
   // PUNCH ACTION
-  // =====================================================
+  // =========================================================
 
   Future<void> handlePunchAction() async {
     try {
@@ -343,25 +397,13 @@ class DashboardController extends GetxController {
 
       final username = await StorageService.getUsername();
 
-      if (username.isEmpty) {
-        return;
-      }
+      if (username.isEmpty) return;
 
       final nextType = currentPunchStatus.value == "in" ? "Out" : "In";
 
       final premises = await _apiService.getPremises(
         username: username,
       );
-
-      if (premises.isEmpty) {
-        Get.snackbar(
-          "Error",
-          "No premises assigned",
-          snackPosition: SnackPosition.TOP,
-        );
-
-        return;
-      }
 
       final matchedPremise = await LocationService.getMatchedPremise(
         premises,
@@ -410,9 +452,9 @@ class DashboardController extends GetxController {
     }
   }
 
-  // =====================================================
+  // =========================================================
   // COMPLETE TASK
-  // =====================================================
+  // =========================================================
 
   Future<void> completeTask(
     TaskModel task,
@@ -451,7 +493,6 @@ class DashboardController extends GetxController {
 
       Map<String, dynamic>? matchedPremise;
 
-// find assigned premise ONLY
       for (final premise in premises) {
         if (premise['premises_id'].toString() == task.premiseId.toString()) {
           matchedPremise = Map<String, dynamic>.from(premise);
@@ -460,7 +501,6 @@ class DashboardController extends GetxController {
         }
       }
 
-// premise not found
       if (matchedPremise == null) {
         if (Get.isDialogOpen ?? false) {
           Get.back();
@@ -477,7 +517,6 @@ class DashboardController extends GetxController {
         return;
       }
 
-// validate ONLY assigned premise
       final isInside = await LocationService.isInsidePremise(
         matchedPremise,
       );
@@ -496,8 +535,6 @@ class DashboardController extends GetxController {
         return;
       }
 
-      // IMAGE TASK
-
       File? imageFile;
 
       if (task.howrMethod.toLowerCase().contains("upload") ||
@@ -512,8 +549,6 @@ class DashboardController extends GetxController {
           return;
         }
       }
-
-      // FORM TASK
 
       if (task.howrType.toLowerCase().contains("form") &&
           task.howrUrl.isNotEmpty) {
@@ -537,20 +572,12 @@ class DashboardController extends GetxController {
         Get.back();
       }
 
-      if ((response['status'] == true || response['success'] == true)) {
+      if (response['status'] == true || response['success'] == true) {
         task.isCompleted = true;
 
         tasks.refresh();
 
-        tasks.sort((a, b) {
-          if (a.isCompleted == b.isCompleted) {
-            return 0;
-          }
-
-          return a.isCompleted ? 1 : -1;
-        });
-
-        tasks.refresh();
+        updateReminderTask();
 
         Get.snackbar(
           "✅ Task Completed",
@@ -579,9 +606,9 @@ class DashboardController extends GetxController {
     }
   }
 
-  // =====================================================
+  // =========================================================
   // PICK IMAGE
-  // =====================================================
+  // =========================================================
 
   Future<File?> pickImage() async {
     try {
@@ -592,9 +619,7 @@ class DashboardController extends GetxController {
         imageQuality: 60,
       );
 
-      if (pickedFile == null) {
-        return null;
-      }
+      if (pickedFile == null) return null;
 
       return File(pickedFile.path);
     } catch (e) {
@@ -602,9 +627,9 @@ class DashboardController extends GetxController {
     }
   }
 
-  // =====================================================
+  // =========================================================
   // HIGHLIGHT
-  // =====================================================
+  // =========================================================
 
   void startHighlightAnimation() {
     highlightTimer?.cancel();
@@ -614,29 +639,24 @@ class DashboardController extends GetxController {
       (timer) {
         if (tasks.isEmpty) return;
 
-        final pendingTasks = tasks.where((e) => !e.isCompleted).toList();
-
-        if (pendingTasks.isEmpty) {
-          highlightedIndex.value = 0;
-          return;
-        }
-
         highlightedIndex.value++;
 
-        if (highlightedIndex.value >= pendingTasks.length) {
+        if (highlightedIndex.value >= tasks.length) {
           highlightedIndex.value = 0;
         }
       },
     );
   }
 
-  // =====================================================
+  // =========================================================
   // DISPOSE
-  // =====================================================
+  // =========================================================
 
   @override
   void onClose() {
     highlightTimer?.cancel();
+
+    reminderTimer?.cancel();
 
     super.onClose();
   }
