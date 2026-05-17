@@ -390,7 +390,7 @@ class ApiService {
 
         // Convert bytes to a Base64 string
         // base64Image = base64Encode(imageBytes);
-        base64Image = "data:image/jpeg;base64,${base64Encode(imageBytes)}";
+        base64Image = "data:image/jpg;base64${base64Encode(imageBytes)}";
       }
 
 // 2. Build a normal Map (NOT FormData)
