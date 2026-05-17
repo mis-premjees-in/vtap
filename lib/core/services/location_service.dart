@@ -2,17 +2,15 @@ import 'package:geolocator/geolocator.dart';
 
 class LocationService {
   // =====================================================
-  // GET MATCHED PREMISE
+  // CHECK LOCATION PERMISSION
   // =====================================================
 
-  static Future<Map<String, dynamic>?> getMatchedPremise(
-    List<dynamic> premises,
-  ) async {
+  static Future<bool> checkLocationPermission() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
       if (!serviceEnabled) {
-        return null;
+        return false;
       }
 
       LocationPermission permission = await Geolocator.checkPermission();
@@ -23,28 +21,58 @@ class LocationService {
 
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        return null;
+        return false;
       }
 
-      Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
+      return true;
+    } catch (e) {
+      print("PERMISSION ERROR => $e");
 
-      for (var premise in premises) {
+      return false;
+    }
+  }
+
+  // =====================================================
+  // GET CURRENT POSITION
+  // =====================================================
+
+  static Future<Position> determinePosition() async {
+    final hasPermission = await checkLocationPermission();
+
+    if (!hasPermission) {
+      throw Exception("Location permission denied");
+    }
+
+    return await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.best,
+    );
+  }
+
+  // =====================================================
+  // GET MATCHED PREMISE
+  // =====================================================
+
+  static Future<Map<String, dynamic>?> getMatchedPremise(
+    List<dynamic> premises,
+  ) async {
+    try {
+      final position = await determinePosition();
+
+      for (final premise in premises) {
         final double lat = double.tryParse(
-              premise['premises_latitude'].toString(),
+              premise['premises_latitude']?.toString() ?? "0",
             ) ??
             0.0;
 
         final double lng = double.tryParse(
-              premise['premises_longitude'].toString(),
+              premise['premises_longitude']?.toString() ?? "0",
             ) ??
             0.0;
 
         final double radius = double.tryParse(
-              premise['premises_radius'].toString(),
+              premise['premises_radius']?.toString() ?? "100",
             ) ??
-            50.0;
+            100.0;
 
         final double distance = Geolocator.distanceBetween(
           position.latitude,
@@ -54,23 +82,28 @@ class LocationService {
         );
 
         print("PREMISE => ${premise['premises_name']}");
+
         print("DISTANCE => $distance");
 
+        print("RADIUS => $radius");
+
         if (distance <= radius) {
-          return premise;
+          return Map<String, dynamic>.from(
+            premise,
+          );
         }
       }
 
       return null;
     } catch (e) {
-      print("LOCATION ERROR => $e");
+      print("MATCH PREMISE ERROR => $e");
 
       return null;
     }
   }
 
   // =====================================================
-  // VALIDATE USER INSIDE PREMISE
+  // VALIDATE INSIDE ANY PREMISE
   // =====================================================
 
   static Future<bool> validateUserInPremise(
@@ -79,5 +112,51 @@ class LocationService {
     final matched = await getMatchedPremise(premises);
 
     return matched != null;
+  }
+
+  // =====================================================
+  // VALIDATE SPECIFIC PREMISE
+  // =====================================================
+
+  static Future<bool> isInsidePremise(
+    Map<String, dynamic> premise,
+  ) async {
+    try {
+      final position = await determinePosition();
+
+      final double lat = double.tryParse(
+            premise['premises_latitude']?.toString() ?? "0",
+          ) ??
+          0.0;
+
+      final double lng = double.tryParse(
+            premise['premises_longitude']?.toString() ?? "0",
+          ) ??
+          0.0;
+
+      final double radius = double.tryParse(
+            premise['premises_radius']?.toString() ?? "100",
+          ) ??
+          100.0;
+
+      final double distance = Geolocator.distanceBetween(
+        position.latitude,
+        position.longitude,
+        lat,
+        lng,
+      );
+
+      print("========== PREMISE CHECK ==========");
+      print("PREMISE => ${premise['premises_name']}");
+      print("DISTANCE => $distance");
+      print("RADIUS => $radius");
+      print("===================================");
+
+      return distance <= radius;
+    } catch (e) {
+      print("INSIDE PREMISE ERROR => $e");
+
+      return false;
+    }
   }
 }

@@ -24,13 +24,12 @@ class DashboardController extends GetxController {
 
   RxBool isHindi = false.obs;
 
-  RxBool isCarousel = false.obs;
-
   RxString currentPunchStatus = "out".obs;
 
   RxInt highlightedIndex = 0.obs;
 
   RxList<TaskModel> tasks = <TaskModel>[].obs;
+
   RxSet<String> completingTasks = <String>{}.obs;
 
   Timer? highlightTimer;
@@ -55,7 +54,12 @@ class DashboardController extends GetxController {
   Future<void> loadInitialData() async {
     await loadPunchStatus();
 
-    await autoPunchInIfInsidePremise();
+    Future.delayed(
+      const Duration(milliseconds: 800),
+      () async {
+        await autoPunchInIfInsidePremise();
+      },
+    );
 
     await fetchTasks();
   }
@@ -72,7 +76,6 @@ class DashboardController extends GetxController {
         return;
       }
 
-      // already punched in
       if (currentPunchStatus.value == "in") {
         return;
       }
@@ -88,7 +91,6 @@ class DashboardController extends GetxController {
       final matchedPremise = await LocationService.getMatchedPremise(
         premises,
       );
-      print("MATCHED PREMISE => $matchedPremise");
 
       if (matchedPremise == null) {
         return;
@@ -117,8 +119,6 @@ class DashboardController extends GetxController {
           snackPosition: SnackPosition.TOP,
           backgroundColor: Colors.green,
           colorText: Colors.white,
-          margin: const EdgeInsets.all(12),
-          borderRadius: 14,
         );
       }
     } catch (e) {
@@ -149,8 +149,8 @@ class DashboardController extends GetxController {
   }
 
   // =====================================================
-// FETCH TASKS
-// =====================================================
+  // FETCH TASKS
+  // =====================================================
 
   Future<void> fetchTasks({
     bool showLoader = true,
@@ -166,26 +166,18 @@ class DashboardController extends GetxController {
         return;
       }
 
-      // =========================================
-      // GET TASKS RESPONSE
-      // =========================================
-
       final dynamic response = await _apiService.getTasks(
         username: username,
       );
-
-      // =========================================
-      // GET COMPLETED TASKS
-      // =========================================
 
       final dynamic completedResponse =
           await _apiService.getTodayCompletedTasks(
         username: username,
       );
 
-      // =========================================
-      // PARSE COMPLETED RECORDS
-      // =========================================
+      // =====================================================
+      // COMPLETED TASK IDS
+      // =====================================================
 
       List<dynamic> completedRecords = [];
 
@@ -196,10 +188,6 @@ class DashboardController extends GetxController {
           completedRecords = completedResponse['data'];
         }
       }
-
-      // =========================================
-      // COMPLETED IDS
-      // =========================================
 
       final now = DateTime.now();
 
@@ -227,75 +215,51 @@ class DashboardController extends GetxController {
         } catch (_) {}
       }
 
-      // =========================================
-      // PARSE TASK RECORDS
-      // =========================================
+      // =====================================================
+      // TASK RECORDS
+      // =====================================================
 
       List<dynamic> records = [];
 
-      // CASE 1 => DIRECT LIST
       if (response is List) {
         records = response;
-      }
-
-      // CASE 2 => MAP RESPONSE
-      else if (response is Map<String, dynamic>) {
-        // response -> response -> Records
+      } else if (response is Map<String, dynamic>) {
         if (response['response'] is Map<String, dynamic>) {
-          final nestedResponse = response['response'] as Map<String, dynamic>;
+          final nested = response['response'];
 
-          if (nestedResponse['Records'] is List) {
-            records = nestedResponse['Records'];
+          if (nested['Records'] is List) {
+            records = nested['Records'];
           }
-        }
-
-        // response -> Records
-        else if (response['Records'] is List) {
+        } else if (response['Records'] is List) {
           records = response['Records'];
         }
-
-        // response -> data
-        else if (response['data'] is List) {
-          records = response['data'];
-        }
       }
 
-      // =========================================
-      // CREATE TASK MODELS
-      // =========================================
+      // =====================================================
+      // CREATE TASKS
+      // =====================================================
 
       List<TaskModel> fetchedTasks = [];
 
       for (final item in records) {
         try {
-          if (item is Map<String, dynamic>) {
-            final task = TaskModel.fromJson(item);
+          final task = TaskModel.fromJson(
+            Map<String, dynamic>.from(item),
+          );
 
-            // completed check
-            if (completedIds.contains(task.id.toString())) {
-              task.isCompleted = true;
-            }
-
-            fetchedTasks.add(task);
-          } else if (item is Map) {
-            final task = TaskModel.fromJson(
-              Map<String, dynamic>.from(item),
-            );
-
-            if (completedIds.contains(task.id.toString())) {
-              task.isCompleted = true;
-            }
-
-            fetchedTasks.add(task);
+          if (completedIds.contains(task.id.toString())) {
+            task.isCompleted = true;
           }
+
+          fetchedTasks.add(task);
         } catch (e) {
           print("TASK PARSE ERROR => $e");
         }
       }
 
-      // =========================================
+      // =====================================================
       // SORT TASKS
-      // =========================================
+      // =====================================================
 
       fetchedTasks.sort((a, b) {
         if (a.isCompleted == b.isCompleted) {
@@ -306,10 +270,6 @@ class DashboardController extends GetxController {
       });
 
       tasks.assignAll(fetchedTasks);
-
-      // =========================================
-      // HIGHLIGHT INDEX
-      // =========================================
 
       highlightedIndex.value = tasks.indexWhere(
         (task) => !task.isCompleted,
@@ -336,7 +296,7 @@ class DashboardController extends GetxController {
   }
 
   // =====================================================
-  // TOGGLE LANGUAGE
+  // LANGUAGE
   // =====================================================
 
   void toggleLanguage() {
@@ -344,7 +304,37 @@ class DashboardController extends GetxController {
   }
 
   // =====================================================
-  // MANUAL PUNCH
+  // GET CURRENT REMINDER TASK
+  // =====================================================
+
+  TaskModel? getCurrentReminderTask() {
+    try {
+      final now = TimeOfDay.now();
+
+      for (final task in tasks) {
+        if (task.isCompleted) continue;
+
+        final parts = task.whenTime.split(":");
+
+        if (parts.length < 2) continue;
+
+        final hour = int.tryParse(parts[0]) ?? 0;
+
+        final minute = int.tryParse(parts[1]) ?? 0;
+
+        if (hour == now.hour && (now.minute - minute).abs() <= 15) {
+          return task;
+        }
+      }
+
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // =====================================================
+  // PUNCH ACTION
   // =====================================================
 
   Future<void> handlePunchAction() async {
@@ -359,10 +349,6 @@ class DashboardController extends GetxController {
 
       final nextType = currentPunchStatus.value == "in" ? "Out" : "In";
 
-      // =========================================
-      // GET PREMISES
-      // =========================================
-
       final premises = await _apiService.getPremises(
         username: username,
       );
@@ -372,16 +358,10 @@ class DashboardController extends GetxController {
           "Error",
           "No premises assigned",
           snackPosition: SnackPosition.TOP,
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
         );
 
         return;
       }
-
-      // =========================================
-      // LOCATION VALIDATION
-      // =========================================
 
       final matchedPremise = await LocationService.getMatchedPremise(
         premises,
@@ -391,21 +371,10 @@ class DashboardController extends GetxController {
         Get.defaultDialog(
           title: "📍 Outside Premise",
           middleText: "You are outside allowed location",
-          radius: 18,
-          confirm: ElevatedButton(
-            onPressed: () {
-              Get.back();
-            },
-            child: const Text("OK"),
-          ),
         );
 
         return;
       }
-
-      // =========================================
-      // SUBMIT PUNCH
-      // =========================================
 
       final whosId = await StorageService.getWhosId();
 
@@ -423,6 +392,7 @@ class DashboardController extends GetxController {
           status: nextType.toLowerCase(),
           premiseName: matchedPremise['premises_name'].toString(),
         );
+
         Get.snackbar(
           "Success",
           nextType == "In"
@@ -431,20 +401,10 @@ class DashboardController extends GetxController {
           snackPosition: SnackPosition.TOP,
           backgroundColor: Colors.green,
           colorText: Colors.white,
-          margin: const EdgeInsets.all(12),
-          borderRadius: 14,
         );
       }
     } catch (e) {
       print("PUNCH ERROR => $e");
-
-      Get.snackbar(
-        "Error",
-        "Attendance failed",
-        snackPosition: SnackPosition.TOP,
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
     } finally {
       isPunching.value = false;
     }
@@ -458,15 +418,11 @@ class DashboardController extends GetxController {
     TaskModel task,
   ) async {
     try {
-      // already completed
       if (task.isCompleted || completingTasks.contains(task.id)) {
         return;
       }
 
       completingTasks.add(task.id);
-      // =========================================
-      // CHECK PUNCH
-      // =========================================
 
       if (currentPunchStatus.value != "in") {
         Get.snackbar(
@@ -489,42 +445,58 @@ class DashboardController extends GetxController {
 
       final username = await StorageService.getUsername();
 
-      if (username.isEmpty) {
-        if (Get.isDialogOpen ?? false) {
-          Get.back();
-        }
-
-        return;
-      }
-
-      // =========================================
-      // VALIDATE LOCATION
-      // =========================================
-
       final premises = await _apiService.getPremises(
         username: username,
       );
 
-      final matchedPremise = await LocationService.getMatchedPremise(
-        premises,
-      );
+      Map<String, dynamic>? matchedPremise;
 
+// find assigned premise ONLY
+      for (final premise in premises) {
+        if (premise['premises_id'].toString() == task.premiseId.toString()) {
+          matchedPremise = Map<String, dynamic>.from(premise);
+
+          break;
+        }
+      }
+
+// premise not found
       if (matchedPremise == null) {
         if (Get.isDialogOpen ?? false) {
           Get.back();
         }
 
-        Get.defaultDialog(
-          title: "📍 Location Error",
-          middleText: "Aap allowed premises se bahar hain",
+        Get.snackbar(
+          "Error",
+          "Assigned premise not found",
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
         );
 
         return;
       }
 
-      // =========================================
+// validate ONLY assigned premise
+      final isInside = await LocationService.isInsidePremise(
+        matchedPremise,
+      );
+
+      if (!isInside) {
+        if (Get.isDialogOpen ?? false) {
+          Get.back();
+        }
+
+        Get.defaultDialog(
+          title: "📍 Outside Premise",
+          middleText:
+              "You are outside assigned location (${matchedPremise['premises_name']})",
+        );
+
+        return;
+      }
+
       // IMAGE TASK
-      // =========================================
 
       File? imageFile;
 
@@ -537,21 +509,11 @@ class DashboardController extends GetxController {
             Get.back();
           }
 
-          Get.snackbar(
-            "Image Required",
-            "Please upload proof image",
-            snackPosition: SnackPosition.TOP,
-            backgroundColor: Colors.orange,
-            colorText: Colors.white,
-          );
-
           return;
         }
       }
 
-      // =========================================
       // FORM TASK
-      // =========================================
 
       if (task.howrType.toLowerCase().contains("form") &&
           task.howrUrl.isNotEmpty) {
@@ -565,18 +527,10 @@ class DashboardController extends GetxController {
         }
       }
 
-      // =========================================
-      // COMPLETE TASK API
-      // =========================================
-
-      // final whosId = await StorageService.getWhosId();
-
       final response = await _apiService.completeTask(
         username: username,
         madbId: task.id.toString(),
         premiseId: matchedPremise['premises_id'].toString(),
-        // userId: whosId,
-        // imageFile: imageFile,
       );
 
       if (Get.isDialogOpen ?? false) {
@@ -588,7 +542,6 @@ class DashboardController extends GetxController {
 
         tasks.refresh();
 
-        // sort again
         tasks.sort((a, b) {
           if (a.isCompleted == b.isCompleted) {
             return 0;
@@ -604,16 +557,6 @@ class DashboardController extends GetxController {
           "Task updated successfully",
           snackPosition: SnackPosition.TOP,
           backgroundColor: Colors.green,
-          colorText: Colors.white,
-          margin: const EdgeInsets.all(12),
-          borderRadius: 14,
-        );
-      } else {
-        Get.snackbar(
-          "Error",
-          "Task completion failed",
-          snackPosition: SnackPosition.TOP,
-          backgroundColor: Colors.red,
           colorText: Colors.white,
         );
       }
@@ -631,6 +574,8 @@ class DashboardController extends GetxController {
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
+    } finally {
+      completingTasks.remove(task.id);
     }
   }
 
@@ -653,14 +598,12 @@ class DashboardController extends GetxController {
 
       return File(pickedFile.path);
     } catch (e) {
-      print("IMAGE PICK ERROR => $e");
-
       return null;
     }
   }
 
   // =====================================================
-  // HIGHLIGHT ANIMATION
+  // HIGHLIGHT
   // =====================================================
 
   void startHighlightAnimation() {
@@ -669,9 +612,7 @@ class DashboardController extends GetxController {
     highlightTimer = Timer.periodic(
       const Duration(seconds: 4),
       (timer) {
-        if (tasks.isEmpty) {
-          return;
-        }
+        if (tasks.isEmpty) return;
 
         final pendingTasks = tasks.where((e) => !e.isCompleted).toList();
 
@@ -679,13 +620,6 @@ class DashboardController extends GetxController {
           highlightedIndex.value = 0;
           return;
         }
-
-        final currentTaskId =
-            pendingTasks[highlightedIndex.value % pendingTasks.length].id;
-
-        highlightedIndex.value = tasks.indexWhere(
-          (e) => e.id == currentTaskId,
-        );
 
         highlightedIndex.value++;
 
