@@ -218,7 +218,7 @@ class DashboardView extends StatelessWidget {
                                       : "PUNCHED IN")
                                   : (controller.isHindi.value
                                       ? "पंच इन करें"
-                                      : "PUNCH IN"),
+                                      : "PUNCHED OUT"),
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor:

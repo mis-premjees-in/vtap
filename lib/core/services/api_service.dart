@@ -397,8 +397,12 @@ class ApiService {
         "username": username,
         "table_name": "utedb",
         "access_token": token,
-        "data": {"utedb_madb": madbId, "utedb_premises_id": premiseId},
-        "proof_image": base64Image // This is now a long text string
+        "data": {
+          "utedb_madb": madbId,
+          "utedb_premises_id": premiseId,
+          "utedb_proof_image": base64Image,
+        },
+        // This is now a long text string
       };
 
 // Debug print your payload as a clean JSON string

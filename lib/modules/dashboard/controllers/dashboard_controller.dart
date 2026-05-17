@@ -140,7 +140,7 @@ class DashboardController extends GetxController {
           const Duration(milliseconds: 600),
           () {
             Get.snackbar(
-              "🎉 Auto Punch In",
+              "🎉 Auto Punched In",
               "Attendance marked at ${matchedPremise['premises_name']}",
               snackPosition: SnackPosition.TOP,
               backgroundColor: Colors.green,
@@ -566,6 +566,8 @@ class DashboardController extends GetxController {
         username: username,
         madbId: task.id.toString(),
         premiseId: matchedPremise['premises_id'].toString(),
+        // IMPORTANT
+        imageFile: imageFile,
       );
 
       if (Get.isDialogOpen ?? false) {
