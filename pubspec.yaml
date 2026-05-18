@@ -41,9 +41,9 @@ dependencies:
   connectivity_plus: ^6.0.5
 
   # UTIL
-  intl: ^0.19.0
+  intl: 
   path_provider: ^2.1.5
-  url_launcher: ^6.3.0
+  url_launcher: 
 
 
 dev_dependencies:
