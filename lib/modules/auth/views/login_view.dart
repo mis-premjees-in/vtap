@@ -290,6 +290,69 @@ class LoginView extends StatelessWidget {
 
                           const SizedBox(height: 25),
 
+                          const SizedBox(height: 18),
+
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Divider(
+                                  color: Colors.grey.shade400,
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                child: Text(
+                                  "OR",
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Divider(
+                                  color: Colors.grey.shade400,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          SizedBox(
+                            width: double.infinity,
+                            height: 58,
+                            child: OutlinedButton.icon(
+                              onPressed: controller.isLoading.value
+                                  ? null
+                                  : () {
+                                      controller.googleLogin();
+                                    },
+                              icon: Image.network(
+                                'https://developers.google.com/identity/images/g-logo.png',
+                                height: 22,
+                              ),
+                              label: const Text(
+                                "Continue with Google",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                side: BorderSide(
+                                  color: Colors.grey.shade300,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                ),
+                              ),
+                            ),
+                          ),
+
                           // ================= FOOTER =================
 
                           Text(

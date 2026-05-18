@@ -44,6 +44,8 @@ dependencies:
   intl: 
   path_provider: ^2.1.5
   url_launcher: 
+  firebase_core: 
+  firebase_auth: 
 
 
 dev_dependencies:

@@ -7,6 +7,7 @@ import '../../../core/services/storage_service.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../routes/app_routes.dart';
 import '../../../core/services/location_service.dart';
+import '../../../core/services/google_auth_service.dart';
 
 class LoginController extends GetxController {
   final AuthRepository repository = AuthRepository();
@@ -134,6 +135,80 @@ class LoginController extends GetxController {
     } finally {
       isLoading.value = false;
     }
+  }
+
+  // =====================================================
+// GOOGLE LOGIN
+// =====================================================
+
+  Future<void> googleLogin() async {
+    try {
+      isLoading.value = true;
+
+      // =========================================
+      // HANDLE REDIRECT RESULT
+      // =========================================
+
+      final redirectedUser = await GoogleAuthService.handleRedirectResult();
+
+      if (redirectedUser != null) {
+        await _handleGoogleUser(redirectedUser);
+        return;
+      }
+
+      // =========================================
+      // NORMAL LOGIN
+      // =========================================
+
+      final user = await GoogleAuthService.signInWithGoogle();
+
+      if (user != null) {
+        await _handleGoogleUser(user);
+        return;
+      }
+
+      // =========================================
+      // WEB POLLING
+      // =========================================
+
+      GoogleAuthService.startWebPolling(
+        isMounted: () => true,
+        onUserFound: (user) async {
+          await _handleGoogleUser(user);
+        },
+      );
+    } catch (e) {
+      print("GOOGLE LOGIN ERROR => $e");
+
+      Get.snackbar(
+        "Google Login Failed",
+        e.toString(),
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  Future<void> _handleGoogleUser(user) async {
+    await StorageService.saveLoginData(
+      token: user.uid,
+      username: user.displayName ?? '',
+      userId: user.email ?? '',
+      whosId: '',
+    );
+
+    Get.snackbar(
+      "Success",
+      "Google login successful",
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: Colors.green,
+      colorText: Colors.white,
+    );
+
+    Get.offAllNamed(AppRoutes.dashboard);
   }
 
   // =====================================================

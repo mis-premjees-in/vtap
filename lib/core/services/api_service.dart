@@ -402,6 +402,8 @@ class ApiService {
           "utedb_madb": madbId,
           "utedb_premises_id": premiseId,
           "utedb_proof_image": base64Image,
+          // "latitute": lat,
+          // "longitude":,
         },
         // This is now a long text string
       };

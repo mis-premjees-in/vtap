@@ -1,12 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import 'core/localization/app_translations.dart';
 import 'core/theme/app_theme.dart';
+import 'core/services/notification_service.dart';
 import 'routes/app_pages.dart';
+import 'core/services/google_auth_service.dart';
+import 'package:flutter/foundation.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  const firebaseConfig = FirebaseOptions(
+    apiKey: "AIzaSyCtQf4e4hP8EYGcXX0LpPTnQCBbhP0RFP8",
+    authDomain: "vtap-6958b.firebaseapp.com",
+    projectId: "vtap-6958b",
+    storageBucket: "vtap-6958b.firebasestorage.app",
+    messagingSenderId: "712249917483",
+    appId: "1:712249917483:web:6ff7ab164814691ad72a6e",
+  );
+
+  if (kIsWeb) {
+    await Firebase.initializeApp(
+      options: firebaseConfig,
+    );
+
+    await FirebaseAuth.instance.setPersistence(
+      Persistence.LOCAL,
+    );
+  } else {
+    await Firebase.initializeApp();
+  }
+
+  await GetStorage.init();
+
+  await NotificationService.initialize();
 
   runApp(const MyApp());
 }

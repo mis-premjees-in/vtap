@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "712249917483-8t328g0sma992a6k3onru4cqvkg0089m.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.premjees.vtap",
+            "certificate_hash": "d91474ecbfca156b5c696dd499c14d4e00de70af"
+          }
+        },
+        {
           "client_id": "712249917483-mah41c0hhe4puvok4lo31e555gk78evn.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
