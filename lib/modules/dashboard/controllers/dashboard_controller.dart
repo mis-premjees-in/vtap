@@ -550,23 +550,80 @@ class DashboardController extends GetxController {
         }
       }
 
-      if (task.howrType.toLowerCase().contains("form") &&
-          task.howrUrl.isNotEmpty) {
-        final Uri uri = Uri.parse(task.howrUrl);
+      // =====================================================
+// OPEN GOOGLE FORM
+// =====================================================
 
-        if (await canLaunchUrl(uri)) {
+      if (task.howrUrl.trim().isNotEmpty) {
+        try {
+          final String cleanUrl = task.howrUrl.trim();
+
+          print("OPENING FORM => $cleanUrl");
+
+          final Uri uri = Uri.parse(cleanUrl);
+
           await launchUrl(
             uri,
-            mode: LaunchMode.inAppBrowserView,
+            mode: LaunchMode.externalApplication,
           );
+
+          // CLOSE LOADER
+          if (Get.isDialogOpen ?? false) {
+            Get.back();
+          }
+
+          // ASK USER AFTER RETURNING
+          final bool? submitted = await Get.dialog<bool>(
+            AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Text("Form Submission"),
+              content: const Text(
+                "Did you submit the Google Form successfully?",
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Get.back(result: false);
+                  },
+                  child: const Text("No"),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Get.back(result: true);
+                  },
+                  child: const Text("Yes"),
+                ),
+              ],
+            ),
+          );
+
+          // USER DID NOT SUBMIT
+          if (submitted != true) {
+            return;
+          }
+
+          // SHOW LOADER AGAIN
+          Get.dialog(
+            const Center(
+              child: CircularProgressIndicator(),
+            ),
+            barrierDismissible: false,
+          );
+        } catch (e) {
+          print("FORM OPEN ERROR => $e");
         }
       }
+
+// =====================================================
+// COMPLETE TASK API
+// =====================================================
 
       final response = await _apiService.completeTask(
         username: username,
         madbId: task.id.toString(),
         premiseId: matchedPremise['premises_id'].toString(),
-        // IMPORTANT
         imageFile: imageFile,
       );
 

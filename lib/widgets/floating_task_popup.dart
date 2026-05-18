@@ -34,11 +34,11 @@ class FloatingTaskPopup extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(Icons.notifications_active, color: Colors.white),
-                  SizedBox(width: 10),
+                  const Icon(Icons.notifications_active, color: Colors.white),
+                  const SizedBox(width: 10),
                   Text(
                     isHindi ? "टास्क रिमाइंडर" : "Task Reminder",
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                     ),
