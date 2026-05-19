@@ -329,10 +329,10 @@ class LoginView extends StatelessWidget {
                                   : () {
                                       controller.googleLogin();
                                     },
-                              icon: Image.network(
-                                'https://developers.google.com/identity/images/g-logo.png',
-                                height: 22,
-                              ),
+                              // icon: Image.network(
+                              //   'https://developers.google.com/identity/images/g-logo.png',
+                              //   height: 22,
+                              // ),
                               label: const Text(
                                 "Continue with Google",
                                 style: TextStyle(
@@ -352,11 +352,12 @@ class LoginView extends StatelessWidget {
                               ),
                             ),
                           ),
+                          const SizedBox(height: 20),
 
                           // ================= FOOTER =================
 
                           Text(
-                            "✨ VTAP Smart Checklist System",
+                            "✨ VTAP! Certify the execution",
                             style: TextStyle(
                               color: Colors.grey.shade700,
                               fontWeight: FontWeight.w500,
@@ -364,7 +365,7 @@ class LoginView extends StatelessWidget {
                           ),
                         ],
                       ),
-                    ).animate().fade().slideY(begin: 0.2),
+                    ).animate().fade().slideY(begin: 2),
 
                     const SizedBox(height: 30),
                   ],
