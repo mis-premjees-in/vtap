@@ -199,8 +199,7 @@ class LoginController extends GetxController {
         tableName: "membership_users",
         username: "tm_premjees",
         access_token: firstToken,
-        customWhere:
-            "email='$googleEmail'", // FIXED: Enabled parameter filter string
+        customWhere: "email='$googleEmail'",
       );
 
       print("MEMBER RESPONSE => $memberResponse");
@@ -217,24 +216,23 @@ class LoginController extends GetxController {
       }
 
       final memberData = records.first;
-      final memberId = memberData['memberID']?.toString() ??
-          memberData['username']?.toString() ??
-          "";
-      final plainPassword = memberData['password']?.toString() ?? "";
+      final memberId = memberData['memberID']?.toString() ?? "";
 
-      if (memberId.isEmpty) {
-        throw Exception("Membership data invalid: memberID empty");
+      // FIXED: Database se direct passMD5 column uthayen (Bcrypt hash)
+      final dbPassMD5 = memberData['passMD5']?.toString() ?? "";
+
+      if (memberId.isEmpty || dbPassMD5.isEmpty) {
+        throw Exception("Membership data invalid");
       }
 
-      // Dynamic MD5 generation from database plain text password string
-      final String passMD5 = computeMd5Hash(plainPassword);
-      print("MEMBER ID => $memberId | PASS MD5 => $passMD5");
+      print("MEMBER ID => $memberId | DB HASH => $dbPassMD5");
 
       // SECOND AUTH LOGIN USING MEMBER ACCOUNT
+      // FIXED: dbPassMD5 ko 'md5' parameter mein bhejें, na ki 'password' mein.
       final authResponse = await repository.apiService.login(
         username: memberId,
         password: "",
-        md5: passMD5,
+        md5: dbPassMD5,
       );
 
       print("SECOND AUTH RESPONSE => $authResponse");

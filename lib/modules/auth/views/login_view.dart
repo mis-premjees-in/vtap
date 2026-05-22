@@ -16,6 +16,7 @@ class LoginView extends StatelessWidget {
       resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
+          // ================= BACKGROUND GRADIENT =================
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -29,6 +30,7 @@ class LoginView extends StatelessWidget {
               ),
             ),
           ),
+
           SafeArea(
             child: SingleChildScrollView(
               child: Padding(
@@ -38,17 +40,14 @@ class LoginView extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    const SizedBox(height: 60),
-                    const SizedBox(height: 60),
+                    const SizedBox(height: 80),
+
+                    // ================= LOGO ICON =================
                     Container(
                       height: 130,
                       width: 130,
                       decoration: const BoxDecoration(
-                      height: 130,
-                      width: 130,
-                      decoration: const BoxDecoration(
                         shape: BoxShape.circle,
-                        gradient: LinearGradient(
                         gradient: LinearGradient(
                           colors: [
                             AppColors.primary,
@@ -58,17 +57,16 @@ class LoginView extends StatelessWidget {
                       ),
                       child: const Icon(
                         Icons.store_mall_directory,
-                        Icons.store_mall_directory,
                         color: Colors.white,
-                        size: 60,
                         size: 60,
                       ),
                     ).animate().fade().scale(),
+
                     const SizedBox(height: 30),
-                    ).animate().fade().scale(),
-                    const SizedBox(height: 30),
+
+                    // ================= HEADER TEXT =================
                     const Text(
-                      "VTAP",
+                      "Premjees VTAP",
                       style: TextStyle(
                         fontSize: 30,
                         fontWeight: FontWeight.bold,
@@ -76,76 +74,80 @@ class LoginView extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      "✨ VTAP! Certify the execution",
+                      "VTAP Smart Checklist System",
                       style: TextStyle(
                         color: Colors.grey.shade700,
                       ),
                     ),
-                    const SizedBox(height: 40),
-                    const SizedBox(height: 40),
+
+                    const SizedBox(height: 60),
+
+                    // ================= LOGIN CARD =================
                     Container(
                       padding: const EdgeInsets.all(24),
-                      padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(30),
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(30),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.orange.withOpacity(0.15),
                             blurRadius: 25,
-                            blurRadius: 25,
                           ),
                         ],
                       ),
                       child: Column(
                         children: [
+                          const SizedBox(height: 10),
+
+                          // ================= GOOGLE BUTTON =================
                           SizedBox(
                             width: double.infinity,
                             height: 58,
-                            child: OutlinedButton.icon(
-                              onPressed: controller.isLoading.value
-                                  ? null
-                                  : () {
-                                      controller.googleLogin();
-                                    },
-                              // icon: Image.network(
-                              //   'https://developers.google.com/identity/images/g-logo.png',
-                              //   height: 22,
-                              // ),
-                              label: const Text(
-                                "Continue with Google",
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                side: BorderSide(
-                                  color: Colors.grey.shade300,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                              ),
-                            ),
+                            child: Obx(() => OutlinedButton.icon(
+                                  onPressed: controller.isLoading.value
+                                      ? null
+                                      : () => controller.googleLogin(),
+                                  icon: controller.isLoading.value
+                                      ? const SizedBox.shrink()
+                                      : const Icon(Icons.login,
+                                          color: Colors.black87),
+                                  label: controller.isLoading.value
+                                      ? const CircularProgressIndicator(
+                                          strokeWidth: 3)
+                                      : const Text(
+                                          "Continue with Google",
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                  style: OutlinedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    side:
+                                        BorderSide(color: Colors.grey.shade300),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(18),
+                                    ),
+                                  ),
+                                )),
                           ),
 
-                          // ================= FOOTER =================
+                          const SizedBox(height: 30),
 
+                          // ================= FOOTER =================
                           Text(
-                            "✨ VTAP Smart Checklist System",
+                            "✨ VTAP! Certify the execution",
                             style: TextStyle(
                               color: Colors.grey.shade700,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
                       ),
                     ).animate().fade().slideY(begin: 0.2),
-                    const SizedBox(height: 30),
+
+                    const SizedBox(height: 40),
                   ],
                 ),
               ),
