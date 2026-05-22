@@ -48,7 +48,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return GetMaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Premjees Task Master',
+      title: 'VTAP',
       theme: AppTheme.lightTheme,
       translations: AppTranslations(),
       locale: const Locale('en'),
