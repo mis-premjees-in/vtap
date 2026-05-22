@@ -11,7 +11,7 @@ void main() {
     );
 
     // Verify login screen appears
-    expect(find.text('Premjees Portal'), findsOneWidget);
+    expect(find.text('VTAP'), findsOneWidget);
 
     expect(find.text('LOGIN'), findsOneWidget);
   });

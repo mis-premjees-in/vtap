@@ -65,7 +65,7 @@ class _SplashViewState extends State<SplashView> {
             ),
             SizedBox(height: 10),
             Text(
-              "Premjees Portal",
+              "VTPs",
               style: TextStyle(
                 color: Colors.white70,
                 fontSize: 18,

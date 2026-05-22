@@ -1,3 +1,5 @@
+// modules/dashboard/controllers/presence_controller.dart
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -14,15 +16,10 @@ class PresenceController extends GetxController {
   // =====================================================
   // FETCH CURRENT STATUS
   // =====================================================
-
   Future<void> fetchStatus(String username) async {
     try {
       isLoading.value = true;
-
-      String status = await _api.getLastPunchStatus(
-        username: username,
-      );
-
+      String status = await _api.getLastPunchStatus(username: username);
       lastStatus.value = status.toLowerCase();
     } catch (e) {
       Get.snackbar(
@@ -37,31 +34,26 @@ class PresenceController extends GetxController {
   // =====================================================
   // HANDLE PUNCH IN / OUT
   // =====================================================
-
   Future<void> handlePunchToggle(String username) async {
     try {
       isLoading.value = true;
-
-      String nextType = lastStatus.value == "in" ? "out" : "in";
+      String nextType = lastStatus.value == "in"
+          ? "Out"
+          : "In"; // FIXED: Capitalized to match PHP payload tracking zone standard
 
       // GET PREMISES
-      List premises = await _api.getPremises(
-        username: username,
-      );
+      List premises = await _api.getPremises(username: username);
 
       if (premises.isEmpty) {
         Get.snackbar(
           "Error",
           "No premises configured",
         );
-
         return;
       }
 
       // LOCATION VALIDATION
-      final matchedPremise = await LocationService.getMatchedPremise(
-        premises,
-      );
+      final matchedPremise = await LocationService.getMatchedPremise(premises);
 
       if (matchedPremise == null) {
         Get.defaultDialog(
@@ -71,27 +63,39 @@ class PresenceController extends GetxController {
           confirmTextColor: Colors.white,
           onConfirm: () => Get.back(),
         );
-
         return;
       }
 
       final whosId = await StorageService.getWhosId();
+      final secureToken = await StorageService
+          .getToken(); // FIXED: Added missing local storage token extraction
 
-// SUBMIT PUNCH
+      // SUBMIT PUNCH
       bool success = await _api.submitPunch(
         username: username,
+        accessToken:
+            secureToken, // FIXED: Injected required accessToken inside parameter map map
         type: nextType,
         premiseId: matchedPremise['premises_id'].toString(),
         whosId: whosId,
       );
 
       if (success) {
-        lastStatus.value = nextType;
+        lastStatus.value = nextType.toLowerCase();
+        await StorageService.saveAttendance(
+          status: nextType.toLowerCase(),
+          premiseName: matchedPremise['premises_name'].toString(),
+        );
 
         Get.snackbar(
-          nextType == "in" ? "🎉 Punch In Success" : "🚀 Punch Out Success",
-          nextType == "in" ? "Swagat hai champion 😎" : "Aaj ka kaam khatam 🔥",
-          backgroundColor: nextType == "in" ? Colors.green : Colors.orange,
+          nextType.toLowerCase() == "in"
+              ? "🎉 Punch In Success"
+              : "🚀 Punch Out Success",
+          nextType.toLowerCase() == "in"
+              ? "Swagat hai champion 😎"
+              : "Aaj ka kaam khatam 🔥",
+          backgroundColor:
+              nextType.toLowerCase() == "in" ? Colors.green : Colors.orange,
           colorText: Colors.white,
           snackPosition: SnackPosition.BOTTOM,
         );
@@ -103,7 +107,6 @@ class PresenceController extends GetxController {
       }
     } catch (e) {
       print("PUNCH ERROR => $e");
-
       Get.snackbar(
         "Error",
         e.toString(),
@@ -117,7 +120,6 @@ class PresenceController extends GetxController {
 // =====================================================
 // PRESENCE PAGE
 // =====================================================
-
 class PresenceBeingPage extends StatelessWidget {
   final String username;
 
@@ -130,7 +132,6 @@ class PresenceBeingPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // CALL ONLY ONCE
     WidgetsBinding.instance.addPostFrameCallback((_) {
       controller.fetchStatus(username);
     });
@@ -147,22 +148,14 @@ class PresenceBeingPage extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // =====================================
-            // STATUS ICON
-            // =====================================
-
             Obx(
               () => AnimatedSwitcher(
-                duration: const Duration(
-                  milliseconds: 500,
-                ),
+                duration: const Duration(milliseconds: 500),
                 child: Icon(
                   controller.lastStatus.value == "in"
                       ? Icons.door_front_door
                       : Icons.location_off,
-                  key: ValueKey(
-                    controller.lastStatus.value,
-                  ),
+                  key: ValueKey(controller.lastStatus.value),
                   size: 100,
                   color: controller.lastStatus.value == "in"
                       ? Colors.green
@@ -170,13 +163,7 @@ class PresenceBeingPage extends StatelessWidget {
                 ),
               ),
             ),
-
             const SizedBox(height: 20),
-
-            // =====================================
-            // STATUS TEXT
-            // =====================================
-
             Obx(
               () => Text(
                 controller.lastStatus.value == "in"
@@ -191,31 +178,19 @@ class PresenceBeingPage extends StatelessWidget {
                 ),
               ),
             ),
-
             const SizedBox(height: 10),
-
             const Text(
               "Slide below to change attendance",
-              style: TextStyle(
-                color: Colors.grey,
-              ),
+              style: TextStyle(color: Colors.grey),
             ),
-
             const SizedBox(height: 80),
-
-            // =====================================
-            // SLIDER
-            // =====================================
-
             Obx(
               () => controller.isLoading.value
                   ? const CircularProgressIndicator()
                   : SmartPunchSlider(
                       isCurrentlyIn: controller.lastStatus.value == "in",
                       onAction: () {
-                        controller.handlePunchToggle(
-                          username,
-                        );
+                        controller.handlePunchToggle(username);
                       },
                     ),
             ),
@@ -229,7 +204,6 @@ class PresenceBeingPage extends StatelessWidget {
 // =====================================================
 // SMART SLIDER
 // =====================================================
-
 class SmartPunchSlider extends StatefulWidget {
   final bool isCurrentlyIn;
   final VoidCallback onAction;
@@ -246,16 +220,13 @@ class SmartPunchSlider extends StatefulWidget {
 
 class _SmartPunchSliderState extends State<SmartPunchSlider> {
   double _dragValue = 0.0;
-
   static const double _maxDrag = 240.0;
 
   @override
   Widget build(BuildContext context) {
     final Color themeColor = widget.isCurrentlyIn ? Colors.red : Colors.green;
-
     final String label =
         widget.isCurrentlyIn ? "SLIDE TO PUNCH OUT" : "SLIDE TO PUNCH IN";
-
     final IconData icon = widget.isCurrentlyIn ? Icons.logout : Icons.login;
 
     return Container(
@@ -271,10 +242,6 @@ class _SmartPunchSliderState extends State<SmartPunchSlider> {
       ),
       child: Stack(
         children: [
-          // =====================================
-          // LABEL
-          // =====================================
-
           Center(
             child: Opacity(
               opacity: (1.0 - (_dragValue / _maxDrag)).clamp(0.2, 1.0),
@@ -288,11 +255,6 @@ class _SmartPunchSliderState extends State<SmartPunchSlider> {
               ),
             ),
           ),
-
-          // =====================================
-          // DRAG BUTTON
-          // =====================================
-
           Positioned(
             left: _dragValue + 5,
             top: 5,
@@ -301,18 +263,13 @@ class _SmartPunchSliderState extends State<SmartPunchSlider> {
               onHorizontalDragUpdate: (details) {
                 setState(() {
                   _dragValue += details.delta.dx;
-
-                  _dragValue = _dragValue.clamp(
-                    0.0,
-                    _maxDrag,
-                  );
+                  _dragValue = _dragValue.clamp(0.0, _maxDrag);
                 });
               },
               onHorizontalDragEnd: (details) {
                 if (_dragValue >= _maxDrag * 0.85) {
                   widget.onAction();
                 }
-
                 setState(() {
                   _dragValue = 0.0;
                 });

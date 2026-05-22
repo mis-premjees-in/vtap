@@ -7,7 +7,6 @@ import 'core/localization/app_translations.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/notification_service.dart';
 import 'routes/app_pages.dart';
-import 'core/services/google_auth_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -49,7 +48,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return GetMaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Premjees Task Master',
+      title: 'VTAP',
       theme: AppTheme.lightTheme,
       translations: AppTranslations(),
       locale: const Locale('en'),

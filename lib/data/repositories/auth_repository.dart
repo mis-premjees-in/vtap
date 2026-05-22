@@ -9,23 +9,16 @@ class AuthRepository {
 
   Future<Response> login({
     required String username,
-    required String password,
+    String password = "",
+    String md5 = "",
   }) async {
-    try {
-      final response = await apiService.dio.post(
-        "/auth.php",
-        data: {
-          "username": username,
-          "password": password,
-
-          // Device id later dynamic hoga
-          "md5": "00:C7:A8:B8:4D:DD:92",
-        },
-      );
-
-      return response;
-    } catch (e) {
-      rethrow;
-    }
+    return await apiService.dio.post(
+      "auth.php",
+      data: {
+        "username": username,
+        "password": password,
+        "md5": md5,
+      },
+    );
   }
 }
