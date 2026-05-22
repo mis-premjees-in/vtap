@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'location_service.dart';
 import 'storage_service.dart';
 
 class ApiService {
@@ -13,7 +14,9 @@ class ApiService {
   static const String baseUrl = "https://tm.premjees.in/api/";
 
   static const String authUrl = "auth.php";
+
   static const String getTableDataUrl = "get_table_data.php";
+
   static const String createRecordUrl = "create_record.php";
 
   ApiService() {
@@ -30,10 +33,6 @@ class ApiService {
       ),
     );
 
-    // =====================================================
-    // TOKEN INTERCEPTOR
-    // =====================================================
-
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
@@ -47,16 +46,13 @@ class ApiService {
         },
         onError: (error, handler) {
           print("API ERROR => ${error.message}");
+
           print("API RESPONSE => ${error.response?.data}");
 
           handler.next(error);
         },
       ),
     );
-
-    // =====================================================
-    // LOGGING
-    // =====================================================
 
     dio.interceptors.add(
       LogInterceptor(
@@ -68,7 +64,7 @@ class ApiService {
   }
 
   // =====================================================
-  // COMMON ERROR HANDLER
+  // ERROR HANDLER
   // =====================================================
 
   Exception handleError(dynamic e) {
@@ -78,7 +74,7 @@ class ApiService {
           return Exception("Connection timeout");
 
         case DioExceptionType.receiveTimeout:
-          return Exception("Server taking too long to respond");
+          return Exception("Server taking too long");
 
         case DioExceptionType.connectionError:
           return Exception("No internet connection");
@@ -102,8 +98,8 @@ class ApiService {
 
   Future<Map<String, dynamic>> login({
     required String username,
-    required String password,
-    required String md5,
+    String password = "",
+    String md5 = "",
   }) async {
     try {
       final response = await dio.post(
@@ -115,14 +111,15 @@ class ApiService {
         },
       );
 
-      return Map<String, dynamic>.from(response.data);
+      return Map<String, dynamic>.from(
+        response.data,
+      );
     } catch (e) {
       throw handleError(e);
     }
   }
-
   // =====================================================
-  // COMMON TABLE FETCH
+  // GET TABLE DATA
   // =====================================================
 
   Future<Map<String, dynamic>> getTableData({
@@ -147,7 +144,9 @@ class ApiService {
         },
       );
 
-      return Map<String, dynamic>.from(response.data);
+      return Map<String, dynamic>.from(
+        response.data,
+      );
     } catch (e) {
       throw handleError(e);
     }
@@ -189,6 +188,7 @@ class ApiService {
       List<dynamic> allTasks = [];
 
       int page = 1;
+
       int totalPages = 1;
 
       do {
@@ -226,8 +226,8 @@ class ApiService {
   }
 
   // =====================================================
-  // GET TODAY COMPLETED TASKS
-  // =====================================================
+// GET TODAY COMPLETED TASKS
+// =====================================================
 
   Future<List<dynamic>> getTodayCompletedTasks({
     required String username,
@@ -250,7 +250,7 @@ class ApiService {
 
       return [];
     } catch (e) {
-      print("COMPLETED TASK ERROR => $e");
+      print("TODAY COMPLETED TASK ERROR => $e");
 
       return [];
     }
@@ -292,19 +292,20 @@ class ApiService {
 
   Future<bool> submitPunch({
     required String username,
+    required String accessToken,
     required String type,
     required String premiseId,
     required String whosId,
   }) async {
     try {
-      final token = await StorageService.getToken();
+      // final token = await StorageService.getToken();
 
       final response = await dio.post(
         createRecordUrl,
         data: {
           "table_name": "pnb",
           "username": username,
-          "access_token": token,
+          "access_token": accessToken,
           "data": {
             "pnb_type": type,
             "pnb_premises_id": premiseId,
@@ -313,11 +314,43 @@ class ApiService {
         },
       );
 
-      print("PUNCH RESPONSE => ${response.data}");
-
       return response.data['status'] == true;
     } catch (e) {
       print("PUNCH ERROR => $e");
+
+      return false;
+    }
+  }
+
+  // =====================================================
+  // UPDATE GOOGLE TOKEN
+  // =====================================================
+
+  Future<bool> updateWhosGoogleToken({
+    required String username,
+    required String accessToken,
+    required String whosId,
+    required String googleToken,
+  }) async {
+    try {
+      final response = await dio.post(
+        "edit_record.php",
+        data: {
+          "table_name": "whos",
+          "username": username,
+          "access_token": accessToken,
+          "selected_id": whosId,
+          "data": {
+            "whos_swg_token": googleToken,
+          }
+        },
+      );
+
+      print(response.data);
+
+      return response.data["response"]?["Error"] == "0";
+    } catch (e) {
+      print(e);
 
       return false;
     }
@@ -331,69 +364,35 @@ class ApiService {
     required String username,
     required String madbId,
     required String premiseId,
-    // required String userId,
     File? imageFile,
   }) async {
     try {
       final token = await StorageService.getToken();
 
-      // FormData formData = FormData.fromMap({
-      //   "username": username,
-      //   "table_name": "utedb",
-      //   "access_token": token,
-      //   "data": {"utedb_madb": madbId, "utedb_premises_id": premiseId}
-      // });
+      double latitude = 0.0;
 
-      // print(jsonEncode(formData));
+      double longitude = 0.0;
 
-      // // =====================================================
-      // // IMAGE
-      // // =====================================================
+      try {
+        final position = await LocationService.determinePosition();
 
-      // if (imageFile != null) {
-      //   final compressedImage = await compressImage(imageFile);
+        latitude = position.latitude;
 
-      //   formData.files.add(
-      //     MapEntry(
-      //       "proof_image",
-      //       await MultipartFile.fromFile(
-      //         compressedImage.path,
-      //         filename: compressedImage.path.split('/').last,
-      //       ),
-      //     ),
-      //   );
-      // }
+        longitude = position.longitude;
+      } catch (e) {
+        print("LOCATION FETCH ERROR => $e");
+      }
 
-      // final response = await dio.post(
-      //   createRecordUrl,
-      //   data: jsonEncode(formData),
-      //   options: Options(
-      //     headers: {
-      //       "Content-Type": "multipart/form-data",
-      //     },
-      //   ),
-      // );
-
-      // 1. Create your FormData with the nested map JSON-encoded (highly recommended for APIs)
-      // 1. Convert ONLY the nested map to a JSON string
-      // 1. Prepare your base payload variables
       String base64Image = "";
 
-// =====================================================
-// IMAGE TO BASE64 CONVERSION
-// =====================================================
       if (imageFile != null) {
         final compressedImage = await compressImage(imageFile);
 
-        // Read the compressed image file bytes
         List<int> imageBytes = await compressedImage.readAsBytes();
 
-        // Convert bytes to a Base64 string
-        // base64Image = base64Encode(imageBytes);
-        base64Image = "data:image/jpg;base64${base64Encode(imageBytes)}";
+        base64Image = "data:image/jpg;base64,${base64Encode(imageBytes)}";
       }
 
-// 2. Build a normal Map (NOT FormData)
       Map<String, dynamic> requestPayload = {
         "username": username,
         "table_name": "utedb",
@@ -402,26 +401,21 @@ class ApiService {
           "utedb_madb": madbId,
           "utedb_premises_id": premiseId,
           "utedb_proof_image": base64Image,
-          // "latitute": lat,
-          // "longitude":,
+          "latitude": latitude,
+          "longitude": longitude,
         },
-        // This is now a long text string
       };
 
-// Debug print your payload as a clean JSON string
-      print("Sending JSON -> ${jsonEncode(requestPayload)}");
-
-// 3. Send it as raw JSON via Dio
       final response = await dio.post(
         createRecordUrl,
-        data:
-            jsonEncode(requestPayload), // Yes! Now you CAN use jsonEncode here
+        data: jsonEncode(requestPayload),
         options: Options(
           headers: {
-            "Content-Type": "application/json", // Explicitly JSON now
+            "Content-Type": "application/json",
           },
         ),
       );
+
       return Map<String, dynamic>.from(
         response.data,
       );
