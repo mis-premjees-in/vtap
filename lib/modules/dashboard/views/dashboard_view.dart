@@ -1,6 +1,7 @@
+// modules/dashboard/views/dashboard_view.dart
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-
 import '../../../core/services/storage_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../widgets/floating_task_popup.dart';
@@ -15,302 +16,159 @@ class DashboardView extends StatelessWidget {
     final DashboardController controller = Get.put(DashboardController());
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF7EF),
+      backgroundColor: const Color(0xFFF8F9FD),
       body: SafeArea(
         child: Stack(
           children: [
             Column(
               children: [
-                // =====================================================
-                // HEADER
-                // =====================================================
-
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(
-                    18,
-                    18,
-                    18,
-                    24,
-                  ),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppColors.primary,
-                        Color(0xFFFFB74D),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.only(
-                      bottomLeft: Radius.circular(28),
-                      bottomRight: Radius.circular(28),
-                    ),
-                  ),
-                  child: Obx(
-                    () => Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  controller.isHindi.value
-                                      ? "नमस्ते 🙏"
-                                      : "Namaste 🙏",
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  controller.isHindi.value
-                                      ? "वर्क टास्क"
-                                      : "Work Tasks",
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 21,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Row(
-                              children: [
-                                // LANGUAGE
-
-                                InkWell(
-                                  onTap: controller.toggleLanguage,
-                                  borderRadius: BorderRadius.circular(14),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    child: Text(
-                                      controller.isHindi.value ? "EN" : "HI",
+                // Clean Header
+                Obx(() => Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(24),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.only(
+                            bottomLeft: Radius.circular(32),
+                            bottomRight: Radius.circular(32)),
+                      ),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                      controller.isHindi.value
+                                          ? "नमस्ते 🙏"
+                                          : "Hello, Team!",
+                                      style: TextStyle(
+                                          color: Colors.grey.shade500,
+                                          fontSize: 14)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                      controller.isHindi.value
+                                          ? "वर्क टास्क"
+                                          : "Daily Tasks",
                                       style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                              Row(
+                                children: [
+                                  _headerCircleBtn(Icons.translate,
+                                      controller.toggleLanguage),
+                                  const SizedBox(width: 8),
+                                  _headerCircleBtn(Icons.refresh,
+                                      () => controller.fetchTasks()),
+                                ],
+                              )
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _statBox(
+                                  controller.tasks
+                                      .where((e) => !e.isCompleted)
+                                      .length
+                                      .toString(),
+                                  "Pending",
+                                  Colors.orange),
+                              _statBox(
+                                  controller.tasks
+                                      .where((e) => e.isCompleted)
+                                      .length
+                                      .toString(),
+                                  "Done",
+                                  Colors.green),
+                              _statBox(controller.tasks.length.toString(),
+                                  "Total", Colors.blue),
+                            ],
+                          )
+                        ],
+                      ),
+                    )),
 
-                                const SizedBox(width: 6),
-
-                                // REFRESH
-
-                                IconButton(
-                                  onPressed: () async {
-                                    await controller.fetchTasks();
-                                  },
-                                  icon: const Icon(
-                                    Icons.refresh_rounded,
-                                    color: Colors.white,
-                                  ),
-                                ),
-
-                                // LOGOUT
-
-                                IconButton(
-                                  onPressed: () async {
-                                    await StorageService.clearAll();
-
-                                    Get.offAllNamed('/login');
-                                  },
-                                  icon: const Icon(
-                                    Icons.logout_rounded,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 18),
-
-                        // =====================================================
-                        // STATS
-                        // =====================================================
-
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            _buildStatCard(
-                              title:
-                                  controller.isHindi.value ? "बाकी" : "Pending",
-                              value: controller.tasks
-                                  .where(
-                                    (e) => !e.isCompleted,
-                                  )
-                                  .length
-                                  .toString(),
-                              icon: Icons.pending_actions,
-                            ),
-                            _buildStatCard(
-                              title: controller.isHindi.value ? "पूरा" : "Done",
-                              value: controller.tasks
-                                  .where(
-                                    (e) => e.isCompleted,
-                                  )
-                                  .length
-                                  .toString(),
-                              icon: Icons.check_circle,
-                            ),
-                            _buildStatCard(
-                              title: controller.isHindi.value ? "कुल" : "Total",
-                              value: controller.tasks.length.toString(),
-                              icon: Icons.list_alt,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // =====================================================
-                // PUNCH BUTTON
-                // =====================================================
-
+                // Punch Button
                 Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   child: Obx(() {
-                    final bool isIn =
-                        controller.currentPunchStatus.value == "in";
-
+                    bool isIn = controller.currentPunchStatus.value == "in";
                     return SizedBox(
                       width: double.infinity,
-                      height: 58,
+                      height: 60,
                       child: ElevatedButton.icon(
                         onPressed: controller.isPunching.value
                             ? null
-                            : () async {
-                                await controller.handlePunchAction();
-                              },
-                        icon: controller.isPunching.value
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : Icon(
-                                isIn ? Icons.fingerprint : Icons.login_rounded,
-                              ),
-                        label: Text(
-                          controller.isPunching.value
-                              ? (controller.isHindi.value
-                                  ? "कृपया प्रतीक्षा करें..."
-                                  : "Please wait...")
-                              : isIn
-                                  ? (controller.isHindi.value
-                                      ? "पंच इन हो चुके हैं"
-                                      : "PUNCHED IN")
-                                  : (controller.isHindi.value
-                                      ? "पंच इन करें"
-                                      : "PUNCHED OUT"),
-                        ),
+                            : () => controller.handlePunchAction(),
                         style: ElevatedButton.styleFrom(
                           backgroundColor:
                               isIn ? Colors.green : Colors.deepOrange,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18),
-                          ),
+                              borderRadius: BorderRadius.circular(16)),
+                          elevation: 0,
                         ),
+                        icon: controller.isPunching.value
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                    color: Colors.white, strokeWidth: 2))
+                            : Icon(isIn ? Icons.verified_user : Icons.login,
+                                color: Colors.white),
+                        label: Text(
+                            isIn
+                                ? "ACTIVE: PUNCHED IN"
+                                : "START WORK: PUNCH IN",
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white)),
                       ),
                     );
                   }),
                 ),
 
-                // =====================================================
-                // TASK LIST
-                // =====================================================
-
+                // Task List
                 Expanded(
                   child: Obx(() {
-                    if (controller.isLoading.value) {
+                    if (controller.isLoading.value)
+                      return const Center(child: CircularProgressIndicator());
+                    if (controller.tasks.isEmpty)
                       return const Center(
-                        child: CircularProgressIndicator(),
-                      );
-                    }
+                          child: Text("No tasks for today. Relax!"));
 
-                    if (controller.tasks.isEmpty) {
-                      return Center(
-                        child: Text(
-                          controller.isHindi.value
-                              ? "कोई टास्क नहीं मिला"
-                              : "No tasks found",
-                        ),
-                      );
-                    }
-
-                    return RefreshIndicator(
-                      onRefresh: () async {
-                        await controller.fetchTasks(
-                          showLoader: false,
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      itemCount: controller.tasks.length,
+                      itemBuilder: (context, index) {
+                        return TaskCard(
+                          task: controller.tasks[index],
+                          isHindi: controller.isHindi.value,
+                          isHighlighted:
+                              controller.highlightedIndex.value == index,
                         );
                       },
-                      child: ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(
-                          16,
-                          4,
-                          16,
-                          140,
-                        ),
-                        itemCount: controller.tasks.length,
-                        itemBuilder: (context, index) {
-                          final task = controller.tasks[index];
-
-                          return TaskCard(
-                            task: task,
-                            isHindi: controller.isHindi.value,
-                            isHighlighted:
-                                controller.highlightedIndex.value == index,
-                            isCompleting:
-                                controller.completingTasks.contains(task.id),
-                            onComplete: () async {
-                              await controller.completeTask(task);
-                            },
-                          );
-                        },
-                      ),
                     );
                   }),
                 ),
               ],
             ),
 
-            // =====================================================
-            // FLOATING TASK POPUP
-            // =====================================================
-
+            // Reminder Popup Overlay
             Obx(() {
-              final activeTask = controller.getCurrentReminderTask();
-
-              if (activeTask == null) {
+              if (controller.reminderTask.value == null)
                 return const SizedBox();
-              }
-
               return FloatingTaskPopup(
-                task: activeTask,
+                task: controller.reminderTask.value!,
                 isHindi: controller.isHindi.value,
-                onComplete: () async {
-                  await controller.completeTask(
-                    activeTask,
-                  );
-                },
+                onComplete: () =>
+                    controller.completeTask(controller.reminderTask.value!),
               );
             }),
           ],
@@ -319,48 +177,33 @@ class DashboardView extends StatelessWidget {
     );
   }
 
-  // =====================================================
-  // STAT CARD
-  // =====================================================
+  Widget _headerCircleBtn(IconData icon, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration:
+            BoxDecoration(color: Colors.grey.shade100, shape: BoxShape.circle),
+        child: Icon(icon, size: 20, color: Colors.black87),
+      ),
+    );
+  }
 
-  Widget _buildStatCard({
-    required String title,
-    required String value,
-    required IconData icon,
-  }) {
+  Widget _statBox(String val, String label, Color color) {
     return Container(
-      width: 90,
-      padding: const EdgeInsets.symmetric(
-        vertical: 12,
-      ),
+      width: Get.width * 0.28,
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(18),
-      ),
+          color: color.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.1))),
       child: Column(
         children: [
-          Icon(
-            icon,
-            color: Colors.white,
-            size: 22,
-          ),
-          const SizedBox(height: 5),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 11,
-            ),
-          ),
+          Text(val,
+              style: TextStyle(
+                  fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+          Text(label,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
         ],
       ),
     );

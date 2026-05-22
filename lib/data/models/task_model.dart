@@ -1,24 +1,23 @@
 class TaskModel {
   final String id;
-
   final String taskEnglish;
   final String taskHindi;
-
   final String whenSession;
   final String whenTime;
-
   final String where;
   final String which;
-
   final String who;
   final String hows;
-
   final String howrMethod;
   final String howrType;
   final String howrUrl;
   final String premiseId;
-
   bool isCompleted;
+
+  // New: Checkbox state management
+  List<bool> stepCheckstates = [];
+  List<String> get stepList =>
+      hows.split('\n').where((s) => s.trim().isNotEmpty).toList();
 
   TaskModel({
     required this.id,
@@ -35,7 +34,10 @@ class TaskModel {
     required this.howrUrl,
     required this.premiseId,
     this.isCompleted = false,
-  });
+  }) {
+    // Initialize checkboxes as false
+    stepCheckstates = List.filled(stepList.length, false);
+  }
 
   factory TaskModel.fromJson(Map<String, dynamic> json) {
     return TaskModel(
