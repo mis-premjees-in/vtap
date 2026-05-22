@@ -39,11 +39,16 @@ class LoginView extends StatelessWidget {
                 child: Column(
                   children: [
                     const SizedBox(height: 60),
+                    const SizedBox(height: 60),
                     Container(
                       height: 130,
                       width: 130,
                       decoration: const BoxDecoration(
+                      height: 130,
+                      width: 130,
+                      decoration: const BoxDecoration(
                         shape: BoxShape.circle,
+                        gradient: LinearGradient(
                         gradient: LinearGradient(
                           colors: [
                             AppColors.primary,
@@ -53,9 +58,13 @@ class LoginView extends StatelessWidget {
                       ),
                       child: const Icon(
                         Icons.store_mall_directory,
+                        Icons.store_mall_directory,
                         color: Colors.white,
                         size: 60,
+                        size: 60,
                       ),
+                    ).animate().fade().scale(),
+                    const SizedBox(height: 30),
                     ).animate().fade().scale(),
                     const SizedBox(height: 30),
                     const Text(
@@ -73,14 +82,19 @@ class LoginView extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 40),
+                    const SizedBox(height: 40),
                     Container(
                       padding: const EdgeInsets.all(24),
+                      padding: const EdgeInsets.all(24),
                       decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(30),
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(30),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.orange.withOpacity(0.15),
+                            blurRadius: 25,
                             blurRadius: 25,
                           ),
                         ],
