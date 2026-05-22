@@ -90,48 +90,48 @@ class LoginView extends StatelessWidget {
                           SizedBox(
                             width: double.infinity,
                             height: 58,
-                            child: Obx(
-                              () => ElevatedButton.icon(
-                                onPressed: controller.isLoading.value
-                                    ? null
-                                    : () {
-                                        controller.googleLogin();
-                                      },
-                                icon: const Icon(
-                                  Icons.login,
-                                  color: Colors.white,
+                            child: OutlinedButton.icon(
+                              onPressed: controller.isLoading.value
+                                  ? null
+                                  : () {
+                                      controller.googleLogin();
+                                    },
+                              icon: Image.network(
+                                'https://developers.google.com/identity/images/g-logo.png',
+                                height: 22,
+                              ),
+                              label: const Text(
+                                "Continue with Google",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
                                 ),
-                                label: controller.isLoading.value
-                                    ? const CircularProgressIndicator(
-                                        color: Colors.white,
-                                      )
-                                    : const Text(
-                                        "Continue with Google",
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.deepOrange,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(18),
-                                  ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                side: BorderSide(
+                                  color: Colors.grey.shade300,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(18),
                                 ),
                               ),
                             ),
                           ),
-                          const SizedBox(height: 20),
+
+                          // ================= FOOTER =================
+
                           Text(
-                            "VTAP! Certify the execution",
+                            "✨ VTAP Smart Checklist System",
                             style: TextStyle(
                               color: Colors.grey.shade700,
                             ),
                           ),
                         ],
                       ),
-                    ),
+                    ).animate().fade().slideY(begin: 0.2),
+                    const SizedBox(height: 30),
                   ],
                 ),
               ),
