@@ -24,20 +24,26 @@ class TaskModel {
 
   // Dynamic Score Calculation Method
   double get score {
-    if (stepCheckstates.isEmpty) return 0.0;
+    if (stepCheckstates.isEmpty) return 100.0;
     int tickedCount = stepCheckstates.where((e) => e == true).length;
     return (tickedCount / stepCheckstates.length) * 100;
   }
 
-  // API Submission ke liye JSON string read karne ka helper
+  // 2. Updated JSON String (Isme ab score bhi include hoga)
   String get getHowsJsonString {
-    Map<String, bool> tempMap = {};
+    Map<String, dynamic> tempMap = {};
     List<String> steps = stepList;
+
     for (int i = 0; i < steps.length; i++) {
+      String stepText = steps[i].trim();
       if (i < stepCheckstates.length) {
-        tempMap["step ${i + 1}"] = stepCheckstates[i];
+        tempMap[stepText] = stepCheckstates[i];
       }
     }
+
+    // ADDED: Last me score bhi save karein JSON me
+    tempMap["final_task_score"] = score.toStringAsFixed(0);
+
     return jsonEncode(tempMap);
   }
 
@@ -61,6 +67,7 @@ class TaskModel {
     stepCheckstates = List.filled(stepList.length, false);
   }
 
+// 3. Factory constructor me parsing logic update karein
   factory TaskModel.fromJson(Map<String, dynamic> json) {
     final task = TaskModel(
       id: json['madb_id'].toString(),
@@ -79,20 +86,22 @@ class TaskModel {
       premiseId: json['madb_premises_id']?.toString() ?? "",
     );
 
-    // Agar server back-end se completed checkpoint updates ka JSON load hota hai
     if (json['utedb_hows1'] != null &&
         json['utedb_hows1'].toString().isNotEmpty) {
       try {
         Map<String, dynamic> parsedMap =
             jsonDecode(json['utedb_hows1'].toString());
         List<String> steps = task.stepList;
+
         for (int i = 0; i < steps.length; i++) {
-          if (parsedMap.containsKey("step ${i + 1}")) {
-            task.stepCheckstates[i] = parsedMap["step ${i + 1}"] == true;
+          String stepText = steps[i].trim();
+          if (parsedMap.containsKey(stepText)) {
+            task.stepCheckstates[i] = parsedMap[stepText] == true;
           }
         }
+        // Note: Score automatic calculate ho jayega stepCheckstates se
       } catch (e) {
-        print("JSON STATE PARSING ERROR => $e");
+        print("JSON SYNC ERROR => $e");
       }
     }
     return task;
