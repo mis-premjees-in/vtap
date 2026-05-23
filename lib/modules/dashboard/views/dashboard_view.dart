@@ -22,15 +22,16 @@ class DashboardView extends StatelessWidget {
           children: [
             Column(
               children: [
-                // Clean Header
+                // Clean Verified Header Card
                 Obx(() => Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(24),
                       decoration: const BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.only(
-                            bottomLeft: Radius.circular(32),
-                            bottomRight: Radius.circular(32)),
+                          bottomLeft: Radius.circular(32),
+                          bottomRight: Radius.circular(32),
+                        ),
                       ),
                       child: Column(
                         children: [
@@ -41,60 +42,112 @@ class DashboardView extends StatelessWidget {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                      controller.isHindi.value
-                                          ? "नमस्ते 🙏"
-                                          : "Hello, Team!",
-                                      style: TextStyle(
-                                          color: Colors.grey.shade500,
-                                          fontSize: 14)),
+                                    controller.isHindi.value
+                                        ? "नमस्ते 🙏"
+                                        : "Hello, Team!",
+                                    style: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 14,
+                                    ),
+                                  ),
                                   const SizedBox(height: 4),
                                   Text(
-                                      controller.isHindi.value
-                                          ? "वर्क टास्क"
-                                          : "Daily Tasks",
-                                      style: const TextStyle(
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.bold)),
+                                    controller.isHindi.value
+                                        ? "वर्क टास्क"
+                                        : "Daily Tasks",
+                                    style: const TextStyle(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ],
                               ),
+                              // Top Right Row: Translate, Refresh & Logout Trigger Controls
                               Row(
                                 children: [
-                                  _headerCircleBtn(Icons.translate,
-                                      controller.toggleLanguage),
+                                  _headerCircleBtn(
+                                    Icons.translate,
+                                    controller.toggleLanguage,
+                                  ),
                                   const SizedBox(width: 8),
-                                  _headerCircleBtn(Icons.refresh,
-                                      () => controller.fetchTasks()),
+                                  _headerCircleBtn(
+                                    Icons.refresh,
+                                    () => controller.fetchTasks(),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  InkWell(
+                                    onTap: () => Get.defaultDialog(
+                                      title: controller.isHindi.value
+                                          ? "लॉगआउट"
+                                          : "Logout",
+                                      middleText: controller.isHindi.value
+                                          ? "क्या आप लॉगआउट करना चाहते हैं?"
+                                          : "Are you sure you want to exit?",
+                                      textCancel: controller.isHindi.value
+                                          ? "नहीं"
+                                          : "No",
+                                      textConfirm: controller.isHindi.value
+                                          ? "हाँ"
+                                          : "Yes",
+                                      confirmTextColor: Colors.white,
+                                      buttonColor: Colors.red,
+                                      onConfirm: () {
+                                        Get.back();
+                                        controller.logoutUser();
+                                      },
+                                    ),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.shade50,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.logout_rounded,
+                                        size: 20,
+                                        color: Colors.redAccent,
+                                      ),
+                                    ),
+                                  ),
                                 ],
-                              )
+                              ),
                             ],
                           ),
                           const SizedBox(height: 20),
+                          // Task Real-time Metrics Panels
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               _statBox(
-                                  controller.tasks
-                                      .where((e) => !e.isCompleted)
-                                      .length
-                                      .toString(),
-                                  "Pending",
-                                  Colors.orange),
+                                controller.tasks
+                                    .where((e) => !e.isCompleted)
+                                    .length
+                                    .toString(),
+                                controller.isHindi.value ? "बाकी" : "Pending",
+                                Colors.orange,
+                              ),
                               _statBox(
-                                  controller.tasks
-                                      .where((e) => e.isCompleted)
-                                      .length
-                                      .toString(),
-                                  "Done",
-                                  Colors.green),
-                              _statBox(controller.tasks.length.toString(),
-                                  "Total", Colors.blue),
+                                controller.tasks
+                                    .where((e) => e.isCompleted)
+                                    .length
+                                    .toString(),
+                                controller.isHindi.value ? "पूरे हुए" : "Done",
+                                Colors.green,
+                              ),
+                              _statBox(
+                                controller.tasks.length.toString(),
+                                controller.isHindi.value
+                                    ? "कुल टास्क"
+                                    : "Total",
+                                Colors.blue,
+                              ),
                             ],
-                          )
+                          ),
                         ],
                       ),
                     )),
 
-                // Punch Button
+                // Attendance Section Module Bar Trigger
                 Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -111,7 +164,8 @@ class DashboardView extends StatelessWidget {
                           backgroundColor:
                               isIn ? Colors.green : Colors.deepOrange,
                           shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16)),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                           elevation: 0,
                         ),
                         icon: controller.isPunching.value
@@ -119,29 +173,47 @@ class DashboardView extends StatelessWidget {
                                 width: 20,
                                 height: 20,
                                 child: CircularProgressIndicator(
-                                    color: Colors.white, strokeWidth: 2))
-                            : Icon(isIn ? Icons.verified_user : Icons.login,
-                                color: Colors.white),
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Icon(
+                                isIn ? Icons.verified_user : Icons.login,
+                                color: Colors.white,
+                              ),
                         label: Text(
-                            isIn
-                                ? "ACTIVE: PUNCHED IN"
-                                : "START WORK: PUNCH IN",
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white)),
+                          isIn
+                              ? (controller.isHindi.value
+                                  ? "सक्रिय: पंच्ड इन"
+                                  : "ACTIVE: PUNCHED IN")
+                              : (controller.isHindi.value
+                                  ? "काम शुरू करें: पंच इन"
+                                  : "START WORK: PUNCH IN"),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
                       ),
                     );
                   }),
                 ),
 
-                // Task List
+                // Core Infinite Dynamic Task Stream Builder List
                 Expanded(
                   child: Obx(() {
-                    if (controller.isLoading.value)
+                    if (controller.isLoading.value) {
                       return const Center(child: CircularProgressIndicator());
-                    if (controller.tasks.isEmpty)
-                      return const Center(
-                          child: Text("No tasks for today. Relax!"));
+                    }
+                    if (controller.tasks.isEmpty) {
+                      return Center(
+                        child: Text(
+                          controller.isHindi.value
+                              ? "आज के लिए कोई कार्य नहीं है। आराम करें!"
+                              : "No tasks for today. Relax!",
+                        ),
+                      );
+                    }
 
                     return ListView.builder(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -160,10 +232,11 @@ class DashboardView extends StatelessWidget {
               ],
             ),
 
-            // Reminder Popup Overlay
+            // Overlapped Background Alert Trigger Overlay Popup
             Obx(() {
-              if (controller.reminderTask.value == null)
+              if (controller.reminderTask.value == null) {
                 return const SizedBox();
+              }
               return FloatingTaskPopup(
                 task: controller.reminderTask.value!,
                 isHindi: controller.isHindi.value,
@@ -182,8 +255,10 @@ class DashboardView extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(10),
-        decoration:
-            BoxDecoration(color: Colors.grey.shade100, shape: BoxShape.circle),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          shape: BoxShape.circle,
+        ),
         child: Icon(icon, size: 20, color: Colors.black87),
       ),
     );
@@ -194,16 +269,27 @@ class DashboardView extends StatelessWidget {
       width: Get.width * 0.28,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-          color: color.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.1))),
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.1)),
+      ),
       child: Column(
         children: [
-          Text(val,
-              style: TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-          Text(label,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+          Text(
+            val,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+            ),
+          ),
         ],
       ),
     );

@@ -12,11 +12,8 @@ class ApiService {
   late Dio dio;
 
   static const String baseUrl = "https://tm.premjees.in/api/";
-
   static const String authUrl = "auth.php";
-
   static const String getTableDataUrl = "get_table_data.php";
-
   static const String createRecordUrl = "create_record.php";
 
   ApiService() {
@@ -46,9 +43,7 @@ class ApiService {
         },
         onError: (error, handler) {
           print("API ERROR => ${error.message}");
-
           print("API RESPONSE => ${error.response?.data}");
-
           handler.next(error);
         },
       ),
@@ -88,7 +83,6 @@ class ApiService {
           return Exception("Something went wrong");
       }
     }
-
     return Exception(e.toString());
   }
 
@@ -168,11 +162,9 @@ class ApiService {
       if (response['status'] == true && response['response']?['Error'] == "0") {
         return response['response']['Records'] ?? [];
       }
-
       return [];
     } catch (e) {
       print("GET PREMISES ERROR => $e");
-
       return [];
     }
   }
@@ -186,9 +178,7 @@ class ApiService {
   }) async {
     try {
       List<dynamic> allTasks = [];
-
       int page = 1;
-
       int totalPages = 1;
 
       do {
@@ -203,14 +193,11 @@ class ApiService {
         if (response['status'] == true &&
             response['response']?['Error'] == "0") {
           final records = response['response']['Records'] ?? [];
-
           allTasks.addAll(records);
-
           totalPages = int.tryParse(
                 response['response']['Total_Pages'].toString(),
               ) ??
               1;
-
           page++;
         } else {
           break;
@@ -229,29 +216,36 @@ class ApiService {
 // GET TODAY COMPLETED TASKS
 // =====================================================
 
+  // =====================================================
+// GET TODAY COMPLETED TASKS (Syncing MADB with UTEDB)
+// =====================================================
   Future<List<dynamic>> getTodayCompletedTasks({
     required String username,
   }) async {
     try {
       final now = DateTime.now();
-
       final today =
           "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+
+      // Filter Logic:
+      // 1. utedb_madb must belong to a task where whos_who2 is our current user
+      // // 2. utedb_created date must be today
+      // final String whereClause =
+      //     "utedb_madb IN (SELECT madb_id FROM madb WHERE madb_who2='$username') "
+      //     "AND DATE(utedb_created)='$today'";
 
       final response = await getTableData(
         tableName: "utedb",
         username: username,
-        customWhere: "whos_who2='$username' AND DATE(utedb_created)='$today'",
+        // customWhere: "DATE(utedb_created)='$today'",
       );
 
       if (response['status'] == true && response['response']?['Error'] == "0") {
         return response['response']['Records'] ?? [];
       }
-
       return [];
     } catch (e) {
       print("TODAY COMPLETED TASK ERROR => $e");
-
       return [];
     }
   }
@@ -364,20 +358,17 @@ class ApiService {
     required String username,
     required String madbId,
     required String premiseId,
+    required String howsJsonString,
     File? imageFile,
   }) async {
     try {
       final token = await StorageService.getToken();
-
       double latitude = 0.0;
-
       double longitude = 0.0;
 
       try {
         final position = await LocationService.determinePosition();
-
         latitude = position.latitude;
-
         longitude = position.longitude;
       } catch (e) {
         print("LOCATION FETCH ERROR => $e");
@@ -387,9 +378,7 @@ class ApiService {
 
       if (imageFile != null) {
         final compressedImage = await compressImage(imageFile);
-
         List<int> imageBytes = await compressedImage.readAsBytes();
-
         base64Image = "data:image/jpg;base64,${base64Encode(imageBytes)}";
       }
 
@@ -401,6 +390,7 @@ class ApiService {
           "utedb_madb": madbId,
           "utedb_premises_id": premiseId,
           "utedb_proof_image": base64Image,
+          "utedb_hows1": howsJsonString,
           "latitude": latitude,
           "longitude": longitude,
         },
