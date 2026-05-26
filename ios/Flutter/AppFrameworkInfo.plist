@@ -20,5 +20,14 @@
   <string>????</string>
   <key>CFBundleVersion</key>
   <string>1.0</string>
+  <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+  <string>App ko attendance auto-punch out ke liye background location chahiye.</string>
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>App ko attendance ke liye location chahiye.</string>
+  <key>UIBackgroundModes</key>
+  <array>
+    <string>location</string>
+    <string>fetch</string>
+  </array>
 </dict>
 </plist>

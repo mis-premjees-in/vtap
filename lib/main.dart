@@ -34,9 +34,12 @@ void main() async {
     await Firebase.initializeApp();
   }
 
+  // 1. GetStorage init (Zaroori hai DashboardController se pehle)
   await GetStorage.init();
 
-  await NotificationService.initialize();
+  // 2. Notification Service init
+  // Note: Iska naam wahi rakhein jo aapki service file mein hai (initialize ya init)
+  await NotificationService.init();
 
   runApp(const MyApp());
 }

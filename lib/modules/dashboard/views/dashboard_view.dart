@@ -233,8 +233,9 @@ class DashboardView extends StatelessWidget {
 
             // Reminder Popup
             Obx(() {
-              if (controller.reminderTask.value == null)
+              if (controller.reminderTask.value == null) {
                 return const SizedBox();
+              }
               return FloatingTaskPopup(
                 task: controller.reminderTask.value!,
                 isHindi: controller.isHindi.value,

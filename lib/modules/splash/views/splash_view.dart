@@ -29,15 +29,12 @@ class _SplashViewState extends State<SplashView> {
     );
 
     final token = await StorageService.getToken();
+    final username = await StorageService.getUsername();
 
-    if (token.isNotEmpty) {
-      Get.offNamed(
-        AppRoutes.dashboard,
-      );
+    if (token.isNotEmpty && username.isNotEmpty) {
+      Get.offNamed(AppRoutes.dashboard);
     } else {
-      Get.offNamed(
-        AppRoutes.login,
-      );
+      Get.offNamed(AppRoutes.login);
     }
   }
 

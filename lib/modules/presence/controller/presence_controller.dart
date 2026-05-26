@@ -34,7 +34,9 @@ class PresenceController extends GetxController {
   // =====================================================
   // HANDLE PUNCH IN / OUT
   // =====================================================
+
   Future<void> handlePunchToggle(String username) async {
+    await fetchStatus(username);
     try {
       isLoading.value = true;
       String nextType = lastStatus.value == "in"

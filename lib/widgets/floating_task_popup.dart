@@ -16,7 +16,7 @@ class FloatingTaskPopup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      bottom: 20,
+      bottom: MediaQuery.of(context).viewInsets.bottom + 20,
       left: 16,
       right: 16,
       child: Material(

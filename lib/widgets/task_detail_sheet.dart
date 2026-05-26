@@ -18,6 +18,25 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
 
   // Logic to handle button click
   void _handleButtonAction() {
+    // --- ADD THIS GUARD CLAUSE ---
+    if (controller.currentPunchStatus.value != "in") {
+      Get.back(); // Sheet band karein
+      Get.defaultDialog(
+        title: widget.isHindi ? "अटेंडेंस ज़रूरी है" : "Attendance Required",
+        middleText: widget.isHindi
+            ? "टास्क शुरू करने के लिए पहले पंच-इन करें।"
+            : "Please Punch-In before starting any task.",
+        textConfirm: widget.isHindi ? "पंच-इन करें" : "Punch-In",
+        confirmTextColor: Colors.white,
+        buttonColor: Colors.green,
+        onConfirm: () {
+          Get.back(); // Dialog band karein
+          controller.handlePunchAction(); // Dashboard ka punch trigger karein
+        },
+        textCancel: widget.isHindi ? "कैंसिल" : "Cancel",
+      );
+      return;
+    }
     bool hasSteps = widget.task.stepList.isNotEmpty;
     bool isAnyStepTicked = widget.task.stepCheckstates.any((e) => e == true);
 
@@ -173,8 +192,9 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
                                     : Colors.black87)),
                         value: widget.task.stepCheckstates[index],
                         activeColor: Colors.deepOrange,
-                        onChanged: widget.task.isCompleted
-                            ? null
+                        onChanged: (widget.task.isCompleted ||
+                                controller.currentPunchStatus.value != "in")
+                            ? null // Disable checkbox if completed OR if punched out
                             : (val) {
                                 setState(() {
                                   widget.task.stepCheckstates[index] = val!;
@@ -188,8 +208,7 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
 
           // Main Dynamic Button
           SizedBox(
-            width: double.infinity,
-            height: 60,
+            height: MediaQuery.of(context).size.height * 0.35,
             child: ElevatedButton(
               onPressed:
                   widget.task.isCompleted ? null : () => _handleButtonAction(),
@@ -217,11 +236,13 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
 
   // Dynamic Button Text Logic
   String _getButtonText(bool hasSteps, bool isAnyStepTicked) {
-    if (widget.task.isCompleted)
+    if (widget.task.isCompleted) {
       return widget.isHindi ? "पूरा हुआ" : "COMPLETED";
+    }
     if (!hasSteps) return widget.isHindi ? "टास्क जमा करें" : "SUBMIT TASK";
-    if (!isAnyStepTicked)
+    if (!isAnyStepTicked) {
       return widget.isHindi ? "सभी टिक करें" : "TICK ALL STEPS";
+    }
     return widget.isHindi ? "फाइनल सबमिट करें" : "FINAL SUBMIT";
   }
 

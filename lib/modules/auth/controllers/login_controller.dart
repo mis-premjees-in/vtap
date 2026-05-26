@@ -74,13 +74,13 @@ class LoginController extends GetxController {
           await repository.apiService.getPremises(username: username);
       final matchedPremise = await LocationService.getMatchedPremise(premises);
       final lastPunchStatus =
-          await repository.apiService.getLastPunchStatus(username: username);
+          await repository.apiService.getLastPunchStatus(username: memberId);
 
       if (matchedPremise != null &&
           whosId.isNotEmpty &&
-          lastPunchStatus != "in") {
+          lastPunchStatus != "out") {
         final success = await repository.apiService.submitPunch(
-          username: username,
+          username: memberId,
           accessToken: token,
           type: "In",
           premiseId: matchedPremise['premises_id'].toString(),
@@ -96,12 +96,10 @@ class LoginController extends GetxController {
       }
 
       Get.snackbar(
-        "Success",
-        "Login successful",
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.green,
-        colorText: Colors.white,
-      );
+          "Attendance Marked", "Aapki attendance lag chuki hai! Swagat hai.",
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.green,
+          colorText: Colors.white);
 
       Get.offAllNamed(AppRoutes.dashboard);
     } catch (e) {
