@@ -208,7 +208,7 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
 
           // Main Dynamic Button
           SizedBox(
-            height: MediaQuery.of(context).size.height * 0.35,
+            width: MediaQuery.of(context).size.height,
             child: ElevatedButton(
               onPressed:
                   widget.task.isCompleted ? null : () => _handleButtonAction(),

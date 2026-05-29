@@ -273,6 +273,30 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.7.0"
+  firebase_messaging:
+    dependency: "direct main"
+    description:
+      name: firebase_messaging
+      sha256: "8d0dc81a31cd030170508dc3e89bfd14355b20a1b991340af5f018e37daab5d7"
+      url: "https://pub.dev"
+    source: hosted
+    version: "16.2.2"
+  firebase_messaging_platform_interface:
+    dependency: transitive
+    description:
+      name: firebase_messaging_platform_interface
+      sha256: "37abb0b0535c5497605ee94c12470e1ebbbe47e71a22d0c20bffcc912311f8cb"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.7.11"
+  firebase_messaging_web:
+    dependency: transitive
+    description:
+      name: firebase_messaging_web
+      sha256: "54e22b43e2c26a2728a3f68c188de0f9011993ae19ae959a06d476dad935c776"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.1.7"
   fixnum:
     dependency: transitive
     description:
@@ -281,11 +305,43 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.1"
+  fl_location:
+    dependency: transitive
+    description:
+      name: fl_location
+      sha256: ef65db6ab481df98b22b81985a4dfb1f9348968c1a974f75ca91d8d7b5292e0d
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.1.0"
+  fl_location_platform_interface:
+    dependency: transitive
+    description:
+      name: fl_location_platform_interface
+      sha256: ffb84044f1791ec719477bf43a26b6d347af697dacf624a25f5c28721d3a0ce1
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.0"
+  fl_location_web:
+    dependency: transitive
+    description:
+      name: fl_location_web
+      sha256: db4cecc6e120dff002339e350be6a9e59e311925802bfd8c648c8789ed2c1003
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.0.0"
   flutter:
     dependency: "direct main"
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_activity_recognition:
+    dependency: transitive
+    description:
+      name: flutter_activity_recognition
+      sha256: "2437368a9f0bf917abb22c98dc20bf72a96f2fce04c4442db0a32df863c67323"
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.1.0"
   flutter_animate:
     dependency: "direct main"
     description:
@@ -496,6 +552,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.2.0"
+  geofence_service:
+    dependency: "direct main"
+    description:
+      name: geofence_service
+      sha256: "2c3b8f43ff5510f1a7cf38708f50f3125f961a9c291404369cb24656fe2bd6a9"
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.0.0+1"
   geolocator:
     dependency: "direct main"
     description:
@@ -1245,14 +1309,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.1"
-  workmanager:
-    dependency: "direct main"
-    description:
-      name: workmanager
-      sha256: ed13530cccd28c5c9959ad42d657cd0666274ca74c56dea0ca183ddd527d3a00
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.5.2"
   xdg_directories:
     dependency: transitive
     description:

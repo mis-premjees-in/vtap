@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:vtap/core/services/notification_service.dart';
 
 import '../../../core/services/api_service.dart';
 import '../../../core/services/location_service.dart';
@@ -120,6 +121,26 @@ class DashboardController extends GetxController {
       mergedTasks.sort((a, b) =>
           a.isCompleted == b.isCompleted ? 0 : (a.isCompleted ? 1 : -1));
       tasks.assignAll(mergedTasks);
+      // 🔥 FIX: Loop through fresh tasks and register them with hardware alarms
+      for (var task in tasks) {
+        if (task.isCompleted || task.whenTime.isEmpty) continue;
+        try {
+          final now = DateTime.now();
+          final split = task.whenTime.split(":");
+          final taskTime = DateTime(now.year, now.month, now.day,
+              int.parse(split[0]), int.parse(split[1]));
+
+          // Schedule explicitly with the working notification helper you set up earlier
+          await NotificationService.scheduleTaskReminder(
+              task.id.hashCode, // Unique integer ID required by OS
+              isHindi.value ? task.taskHindi : task.taskEnglish,
+              taskTime);
+        } catch (e) {
+          print(
+              "Failed background hardware scheduling for task: ${task.id} -> $e");
+        }
+      }
+      _scheduleAllLocalReminders();
       updateReminderTask();
       highlightedIndex.value =
           tasks.indexWhere((e) => !e.isCompleted).clamp(0, tasks.length);
@@ -127,6 +148,34 @@ class DashboardController extends GetxController {
       print("FETCH ERROR => $e");
     } finally {
       isLoading.value = false;
+    }
+  }
+
+  void _scheduleAllLocalReminders() async {
+    final now = DateTime.now();
+    for (final task in tasks) {
+      if (task.isCompleted || task.whenTime.isEmpty) continue;
+
+      try {
+        final split = task.whenTime.split(":");
+        final int hour = int.parse(split[0]);
+        final int minute = int.parse(split[1]);
+
+        final taskDateTime =
+            DateTime(now.year, now.month, now.day, hour, minute);
+
+        // Generate a clean integer ID out of string IDs (e.g., "12b" -> hash integer)
+        final int notificationId = task.id.toString().hashCode;
+
+        // Push directly to our background OS alert channel
+        await NotificationService.scheduleTaskReminder(
+          notificationId,
+          isHindi.value ? task.taskHindi : task.taskEnglish,
+          taskDateTime,
+        );
+      } catch (e) {
+        print("Error scheduling individual task reminder: $e");
+      }
     }
   }
 

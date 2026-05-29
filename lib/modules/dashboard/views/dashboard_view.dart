@@ -3,14 +3,26 @@ import 'package:get/get.dart';
 import '../../../widgets/floating_task_popup.dart';
 import '../../../widgets/task_card.dart';
 import '../controllers/dashboard_controller.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class DashboardView extends StatelessWidget {
   const DashboardView({super.key});
+  void _requestNotificationPermission() async {
+    // Uses structural platform-checking mechanisms built directly into the core
+    if (GetPlatform.isAndroid) {
+      final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
+          FlutterLocalNotificationsPlugin()
+              .resolvePlatformSpecificImplementation<
+                  AndroidFlutterLocalNotificationsPlugin>();
+
+      await androidImplementation?.requestNotificationsPermission();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final DashboardController controller = Get.put(DashboardController());
-
+    _requestNotificationPermission();
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FD),
       body: SafeArea(

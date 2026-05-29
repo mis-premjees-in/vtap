@@ -7,14 +7,13 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   static Future<void> init() async {
-    // 1. Timezone data initialize karein (Scheduled notification ke liye compulsory)
     tz.initializeTimeZones();
 
     // 1. Android settings define karein
     const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    // 2. iOS/Darwin settings define karein (Zaroori hai initialization ke liye)
+    // 2. iOS/Darwin settings define karein
     const DarwinInitializationSettings iosSettings =
         DarwinInitializationSettings();
 
@@ -22,24 +21,38 @@ class NotificationService {
     const InitializationSettings initializationSettings =
         InitializationSettings(
       android: androidSettings,
-      iOS: iosSettings, // Agar iOS settings nahi dalenge toh error aayega
+      iOS: iosSettings,
     );
 
-    // 4. Ab plugin ko initialize karein
+    // 4. Initialize plugin
     await _notificationsPlugin.initialize(
       initializationSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
-        // Jab user notification pe click kare tab kya ho (Optional)
         print("Notification Clicked: ${response.payload}");
       },
     );
+
+    // 🔥 FIXED: Android notification channel explicitly create karein!
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'task_channel', // Id (Must match exactly what you use in zonedSchedule)
+      'Task Reminders', // Title visible to user in app settings
+      description: 'This channel is used for VTAP task reminders.',
+      importance: Importance.max,
+      playSound: true,
+    );
+
+    // Resolve platform specific implementation and create channel
+    await _notificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
   }
 
   static Future<void> scheduleTaskReminder(
       int id, String title, DateTime taskTime) async {
     // Task time se 10 minute pehle ka time calculate karein
     final scheduleTime = tz.TZDateTime.from(
-      taskTime.subtract(const Duration(minutes: 10)),
+      taskTime.subtract(const Duration(minutes: 5)),
       tz.local,
     );
 
@@ -47,16 +60,25 @@ class NotificationService {
       await _notificationsPlugin.zonedSchedule(
         id,
         "Task Reminder (VTAP)",
-        "Aapka task '$title' 10 min mein shuru hone wala hai.",
+        "Aapka task '$title' 5 min mein shuru hone wala hai.",
         scheduleTime,
         const NotificationDetails(
-          android: AndroidNotificationDetails('task_channel', 'Task Reminders',
-              importance: Importance.max, priority: Priority.high),
+          android: AndroidNotificationDetails(
+            'task_channel', // Matches the channel created in init()
+            'Task Reminders',
+            importance: Importance.max,
+            priority: Priority.high,
+            playSound: true,
+          ),
+          iOS: DarwinNotificationDetails(), // Added for fallback safety
         ),
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.absoluteTime,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       );
+      print("Notification scheduled successfully for: $scheduleTime");
+    } else {
+      print("Warning: Scheduled time is in the past! Notification not set.");
     }
   }
 }

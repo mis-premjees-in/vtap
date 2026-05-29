@@ -2,6 +2,7 @@
 
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -162,6 +163,16 @@ class LoginController extends GetxController {
     try {
       isLoading.value = true;
 
+      // 1. FETCH THE ACTUAL FCM NOTIFICATION TOKEN HERE
+      String? fcmDeviceToken;
+      try {
+        fcmDeviceToken = await FirebaseMessaging.instance.getToken();
+        print("REAL FCM DEVICE TOKEN => $fcmDeviceToken");
+        // This will print the correct ~163 character token!
+      } catch (fcmError) {
+        print("Error fetching FCM token: $fcmError");
+      }
+
       final String googleEmail = user.email?.toString().trim() ?? "";
       if (googleEmail.isEmpty) {
         throw Exception("Google email not found");
@@ -170,10 +181,10 @@ class LoginController extends GetxController {
       final String googleToken = await user.getIdToken();
 
       await StorageService.saveGoogleData(
-        email: googleEmail,
-        uid: user.uid,
-        token: googleToken,
-      );
+          email: googleEmail,
+          uid: user.uid,
+          token: fcmDeviceToken.toString() //googleToken,
+          );
 
       print("GOOGLE EMAIL => $googleEmail");
 
@@ -264,11 +275,11 @@ class LoginController extends GetxController {
       // STEP 4 => SAVE GOOGLE TOKEN INTO WHOS TABLE
       if (whosId.isNotEmpty) {
         await repository.apiService.updateWhosGoogleToken(
-          username: memberId,
-          accessToken: backendToken,
-          whosId: whosId,
-          googleToken: googleToken,
-        );
+            username: memberId,
+            accessToken: backendToken,
+            whosId: whosId,
+            googleToken: fcmDeviceToken.toString() //googleToken,
+            );
       }
 
       // STEP 5 => SAVE LOGIN DATA LOCALLY (Overwriting with the 2nd token)
