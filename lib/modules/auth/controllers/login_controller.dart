@@ -1,5 +1,4 @@
 // modules/auth/controllers/login_controller.dart
-
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -20,7 +19,6 @@ class LoginController extends GetxController {
   RxBool isLoading = false.obs;
   RxBool obscurePassword = true.obs;
 
-  // MD5 generator context code
   String computeMd5Hash(String value) {
     return md5.convert(utf8.encode(value)).toString();
   }
@@ -32,12 +30,14 @@ class LoginController extends GetxController {
     try {
       isLoading.value = true;
 
-      final response = await repository.login(
+      // Accessing login direct from apiService instance mapping
+      final response = await repository.apiService.login(
         username: usernameController.text.trim(),
         password: passwordController.text.trim(),
+        md5: computeMd5Hash(passwordController.text.trim()),
       );
 
-      final data = response.data;
+      final data = response;
       final responseData = data['response'] ?? {};
       final token = responseData['Access_Token']?.toString() ?? '';
       final userData = responseData['User_Data'] ?? {};
@@ -45,9 +45,7 @@ class LoginController extends GetxController {
           userData['memberID']?.toString() ?? usernameController.text.trim();
       final memberId = userData['memberID']?.toString() ?? '';
 
-      if (token.isEmpty) {
-        throw Exception("Token missing");
-      }
+      if (token.isEmpty) throw Exception("Token missing");
 
       String whosId = "";
       final whosResponse = await repository.apiService.getTableData(
@@ -88,12 +86,12 @@ class LoginController extends GetxController {
           whosId: whosId,
         );
 
-        if (success) {
-          await StorageService.saveAttendance(
-            status: "in",
-            premiseName: matchedPremise['premises_name'].toString(),
-          );
-        }
+        // if (success) {
+        //   await StorageService.saveAttendance(
+        //     status: "in",
+        //     premiseName: matchedPremise['premises_name'].toString(),
+        //   );
+        // }
       }
 
       Get.snackbar(
@@ -159,16 +157,14 @@ class LoginController extends GetxController {
   // =====================================================
   // FIXED HANDLE GOOGLE USER PROCESS
   // =====================================================
-  Future<void> _handleGoogleUser(user) async {
+  Future<void> _handleGoogleUser(dynamic user) async {
     try {
       isLoading.value = true;
 
-      // 1. FETCH THE ACTUAL FCM NOTIFICATION TOKEN HERE
       String? fcmDeviceToken;
       try {
         fcmDeviceToken = await FirebaseMessaging.instance.getToken();
         print("REAL FCM DEVICE TOKEN => $fcmDeviceToken");
-        // This will print the correct ~163 character token!
       } catch (fcmError) {
         print("Error fetching FCM token: $fcmError");
       }
@@ -178,44 +174,35 @@ class LoginController extends GetxController {
         throw Exception("Google email not found");
       }
 
-      final String googleToken = await user.getIdToken();
-
       await StorageService.saveGoogleData(
-          email: googleEmail,
-          uid: user.uid,
-          token: fcmDeviceToken.toString() //googleToken,
-          );
+        email: googleEmail,
+        uid: user.uid.toString(), // Fixes property access type errors
+        token: fcmDeviceToken ?? '',
+      );
 
       print("GOOGLE EMAIL => $googleEmail");
 
-      // STEP 1 => AUTH LOGIN USING DEFAULT CREDS
-      final firstLoginResponse = await repository.apiService.login(
-        username: "tm_premjees",
-        password: "Another10\$1",
-      );
-
+      final firstLoginResponse = await repository.apiService.first_login();
       print("FIRST LOGIN => $firstLoginResponse");
+
       final firstLoginData = firstLoginResponse['response'] ?? {};
+      final firstUser = firstLoginData['MemberId']?.toString() ?? '';
       final firstToken = firstLoginData['Access_Token']?.toString() ?? '';
 
       if (firstToken.isEmpty) {
         throw Exception("Unable to generate initial token");
       }
 
-      // STEP 2 => FIND USER FROM membership_users WITH VALID FILTER
       final memberResponse = await repository.apiService.getTableData(
         tableName: "membership_users",
-        username: "tm_premjees",
+        username: firstUser,
         access_token: firstToken,
         customWhere: "email='$googleEmail'",
       );
 
-      print("MEMBER RESPONSE => $memberResponse");
-
       if (memberResponse['response']?['Error'] != "0") {
         throw Exception(
-          memberResponse['response']?['Message'] ?? "User not found",
-        );
+            memberResponse['response']?['Message'] ?? "User not found");
       }
 
       final records = memberResponse['response']['Records'] as List;
@@ -225,33 +212,24 @@ class LoginController extends GetxController {
 
       final memberData = records.first;
       final memberId = memberData['memberID']?.toString() ?? "";
-
-      // FIXED: Database se direct passMD5 column uthayen (Bcrypt hash)
       final dbPassMD5 = memberData['passMD5']?.toString() ?? "";
 
       if (memberId.isEmpty || dbPassMD5.isEmpty) {
         throw Exception("Membership data invalid");
       }
 
-      print("MEMBER ID => $memberId | DB HASH => $dbPassMD5");
-
-      // SECOND AUTH LOGIN USING MEMBER ACCOUNT
-      // FIXED: dbPassMD5 ko 'md5' parameter mein bhejें, na ki 'password' mein.
       final authResponse = await repository.apiService.login(
         username: memberId,
         password: "",
         md5: dbPassMD5,
       );
 
-      print("SECOND AUTH RESPONSE => $authResponse");
       final backendToken =
           authResponse['response']?['Access_Token']?.toString() ?? '';
-
       if (backendToken.isEmpty) {
         throw Exception("Unable to generate VTAP token");
       }
 
-      // STEP 3 => FETCH WHOS ID
       String whosId = "";
       final whosResponse = await repository.apiService.getTableData(
         tableName: "whos",
@@ -260,42 +238,36 @@ class LoginController extends GetxController {
         customWhere: "whos_who2='${memberId.toUpperCase()}'",
       );
 
-      print("WHOS RESPONSE => $whosResponse");
-
       if (whosResponse['response']?['Error'] == "0") {
         final whosRecords = whosResponse['response']['Records'] as List;
         if (whosRecords.isNotEmpty) {
-          final whosData = whosRecords.first;
-          whosId = whosData['whos_id']?.toString() ?? '';
+          whosId = whosRecords.first['whos_id']?.toString() ?? '';
         }
       }
 
-      print("WHOS ID => $whosId");
-
-      // STEP 4 => SAVE GOOGLE TOKEN INTO WHOS TABLE
       if (whosId.isNotEmpty) {
         await repository.apiService.updateWhosGoogleToken(
             username: memberId,
             accessToken: backendToken,
             whosId: whosId,
-            googleToken: fcmDeviceToken.toString() //googleToken,
-            );
+            googleToken: fcmDeviceToken ?? '',
+            firstUser: firstUser,
+            firstToken: firstToken);
       }
 
-      // STEP 5 => SAVE LOGIN DATA LOCALLY (Overwriting with the 2nd token)
       await StorageService.saveLoginData(
         token: backendToken,
         username: memberId,
         userId: memberId,
         whosId: whosId,
+        firstUser: firstUser,
+        firstToken: backendToken,
       );
 
-      // STEP 6 => FETCH PREMISES
       final premises =
           await repository.apiService.getPremises(username: memberId);
       final matchedPremise = await LocationService.getMatchedPremise(premises);
 
-      // STEP 8 => AUTO PUNCH-IN
       if (matchedPremise != null && whosId.isNotEmpty) {
         final success = await repository.apiService.submitPunch(
           username: memberId,
@@ -305,12 +277,12 @@ class LoginController extends GetxController {
           whosId: whosId,
         );
 
-        if (success) {
-          await StorageService.saveAttendance(
-            status: "in",
-            premiseName: matchedPremise['premises_name'].toString(),
-          );
-        }
+        // if (success) {
+        //   await StorageService.saveAttendance(
+        //     status: "in",
+        //     premiseName: matchedPremise['premises_name'].toString(),
+        //   );
+        // }
       }
 
       Get.snackbar(

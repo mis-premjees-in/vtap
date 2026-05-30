@@ -89,6 +89,21 @@ class ApiService {
   // =====================================================
   // LOGIN
   // =====================================================
+  Future<Map<String, dynamic>> first_login({
+    String username = "",
+    String password = "",
+    String md5 = "",
+  }) async {
+    try {
+      final response = await dio.post(authUrl);
+
+      return Map<String, dynamic>.from(
+        response.data,
+      );
+    } catch (e) {
+      throw handleError(e);
+    }
+  }
 
   Future<Map<String, dynamic>> login({
     required String username,
@@ -320,19 +335,21 @@ class ApiService {
   // UPDATE GOOGLE TOKEN
   // =====================================================
 
-  Future<bool> updateWhosGoogleToken({
-    required String username,
-    required String accessToken,
-    required String whosId,
-    required String googleToken,
-  }) async {
+  Future<bool> updateWhosGoogleToken(
+      {required String username,
+      required String accessToken,
+      required String whosId,
+      required String googleToken,
+      String? firstUser,
+      String? firstToken}) async {
     try {
       final response = await dio.post(
         "edit_record.php",
         data: {
           "table_name": "whos",
-          "username": username,
-          "access_token": accessToken,
+          "username":
+              firstUser ?? await StorageService.getFirstUser(), //username,
+          "access_token": firstToken ?? await StorageService.getFirstToken(),
           "selected_id": whosId,
           "data": {
             "whos_swg_token": googleToken,

@@ -10,12 +10,11 @@ class TaskCard extends StatelessWidget {
   final bool isHindi;
   final bool isHighlighted;
 
-  const TaskCard({
-    super.key,
-    required this.task,
-    required this.isHindi,
-    required this.isHighlighted,
-  });
+  const TaskCard(
+      {super.key,
+      required this.task,
+      required this.isHindi,
+      required this.isHighlighted});
 
   @override
   Widget build(BuildContext context) {
@@ -49,8 +48,10 @@ class TaskCard extends StatelessWidget {
         ),
         child: Row(
           children: [
+            // Status Circle
             _buildStatusIcon(),
             const SizedBox(width: 18),
+            // Definition & Tags
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

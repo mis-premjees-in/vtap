@@ -1,12 +1,7 @@
-// modules/dashboard/widgets/task_detail_sheet.dart
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:vtap/modules/dashboard/controllers/dashboard_controller.dart';
-import 'package:vtap/modules/presence/controller/presence_controller.dart';
-import '../../../data/models/task_model.dart';
-
-import '../../../core/services/storage_service.dart';
+import '../data/models/task_model.dart';
+import '../modules/dashboard/controllers/dashboard_controller.dart';
 
 class TaskDetailSheet extends StatefulWidget {
   final TaskModel task;
@@ -20,15 +15,15 @@ class TaskDetailSheet extends StatefulWidget {
 
 class _TaskDetailSheetState extends State<TaskDetailSheet> {
   final controller = Get.find<DashboardController>();
-  final presenceController = Get.put(PresenceController()); // 🔥 INJECTED
 
-  void _handleButtonAction() async {
-    // 1. Attendance Verification Guard Block
+  // Logic to handle button click
+  void _handleButtonAction() {
+    // --- ADD THIS GUARD CLAUSE ---
     print(
         "current status ${controller.currentPunchStatus.value.toString().trim().toLowerCase()}");
     if (controller.currentPunchStatus.value.toString().trim().toLowerCase() !=
         "in") {
-      Get.back();
+      Get.back(); // Sheet band karein
       Get.defaultDialog(
         title: widget.isHindi ? "अटेंडेंस ज़रूरी है" : "Attendance Required",
         middleText: widget.isHindi
@@ -38,57 +33,30 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
         confirmTextColor: Colors.white,
         buttonColor: Colors.green,
         onConfirm: () {
-          Get.back();
-          controller.handlePunchAction();
+          Get.back(); // Dialog band karein
+          controller.handlePunchAction(); // Dashboard ka punch trigger karein
         },
         textCancel: widget.isHindi ? "कैंसिल" : "Cancel",
       );
       return;
     }
-
-    // 2. CONDITION 2: Verify user position falls within dynamic database radius limit
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
-
-    final String activeUsername = await StorageService.getUsername();
-    // Validate position coordinates directly inside the dynamic shop radius fence
-    bool isAllowed = await presenceController.isUserWithinTaskRadius(
-        activeUsername, widget.task.premiseId);
-    Get.back(); // Dismiss progress spinner safely
-
-    if (!isAllowed) {
-      Get.back(); // Dismiss bottom sheet workflow container
-      Get.defaultDialog(
-        title: widget.isHindi ? "लोकेशन एरर" : "Location Out of Range",
-        middleText: widget.isHindi
-            ? "Aap is task ko update nahi kar sakte kyunki aap shop ki assigned task boundary se bahar hain."
-            : "You cannot complete this task because you are located outside the assigned shop footprint boundary.",
-        textConfirm: "OK",
-        confirmTextColor: Colors.white,
-        buttonColor: Colors.redAccent,
-        onConfirm: () => Get.back(),
-      );
-      return;
-    }
-
-    // Proceeding using your native model checklist configurations safely
     bool hasSteps = widget.task.stepList.isNotEmpty;
     bool isAnyStepTicked = widget.task.stepCheckstates.any((e) => e == true);
 
+    // CASE 1: No steps involved
     if (!hasSteps) {
       _proceedToFinalSubmit();
       return;
     }
 
+    // CASE 2: Steps exist but NOTHING is ticked yet (Auto-Tick Mode)
     if (!isAnyStepTicked) {
       setState(() {
         for (int i = 0; i < widget.task.stepCheckstates.length; i++) {
           widget.task.stepCheckstates[i] = true;
         }
       });
+      // Sirf UI update hoga, save nahi. User ab untick kar sakta hai.
       Get.snackbar(
         widget.isHindi ? "सभी स्टेप्स टिक हुए" : "All steps ticked",
         widget.isHindi
@@ -101,6 +69,7 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
       return;
     }
 
+    // CASE 3: Steps exist and user has selected some/all (Final Save Mode)
     _proceedToFinalSubmit();
   }
 
@@ -108,15 +77,15 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
     Get.defaultDialog(
       title: widget.isHindi ? "पुष्टि करें" : "Confirm Submission",
       middleText: widget.isHindi
-          ? "क्या आप इस काम को सेव करना चाहते हैं??" //क्या आप इस टास्क को ${widget.task.score.toStringAsFixed(0)}% स्कोर के साथ जमा करना चाहते हैं?"
-          : "Do you want to submit this task?", // with ${widget.task.score.toStringAsFixed(0)}% score?",
+          ? "क्या आप इस टास्क को ${widget.task.score.toStringAsFixed(0)}% स्कोर के साथ जमा करना चाहते हैं?"
+          : "Do you want to submit this task with ${widget.task.score.toStringAsFixed(0)}% score?",
       textConfirm: widget.isHindi ? "हाँ" : "Yes",
       textCancel: widget.isHindi ? "नहीं" : "No",
       confirmTextColor: Colors.white,
       buttonColor: Colors.deepOrange,
       onConfirm: () {
-        Get.back();
-        Get.back();
+        Get.back(); // Dialog band karein
+        Get.back(); // Sheet band karein
         controller.completeTask(widget.task);
       },
     );
@@ -155,6 +124,8 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
             _detailTag(Icons.location_on, widget.task.where),
           ]),
           const SizedBox(height: 25),
+
+          // Quality Score Indicator
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
@@ -189,6 +160,8 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
                   color: Colors.grey,
                   fontSize: 12)),
           const SizedBox(height: 10),
+
+          // Checklist Builder
           Flexible(
             child: !hasSteps
                 ? Padding(
@@ -224,7 +197,7 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
                         activeColor: Colors.deepOrange,
                         onChanged: (widget.task.isCompleted ||
                                 controller.currentPunchStatus.value != "in")
-                            ? null
+                            ? null // Disable checkbox if completed OR if punched out
                             : (val) {
                                 setState(() {
                                   widget.task.stepCheckstates[index] = val!;
@@ -235,8 +208,10 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
                   ),
           ),
           const SizedBox(height: 30),
+
+          // Main Dynamic Button
           SizedBox(
-            width: double.infinity,
+            width: MediaQuery.of(context).size.height,
             child: ElevatedButton(
               onPressed:
                   widget.task.isCompleted ? null : () => _handleButtonAction(),
@@ -262,12 +237,15 @@ class _TaskDetailSheetState extends State<TaskDetailSheet> {
     );
   }
 
+  // Dynamic Button Text Logic
   String _getButtonText(bool hasSteps, bool isAnyStepTicked) {
-    if (widget.task.isCompleted)
+    if (widget.task.isCompleted) {
       return widget.isHindi ? "पूरा हुआ" : "COMPLETED";
+    }
     if (!hasSteps) return widget.isHindi ? "टास्क जमा करें" : "SUBMIT TASK";
-    if (!isAnyStepTicked)
+    if (!isAnyStepTicked) {
       return widget.isHindi ? "सभी टिक करें" : "TICK ALL STEPS";
+    }
     return widget.isHindi ? "फाइनल सबमिट करें" : "FINAL SUBMIT";
   }
 

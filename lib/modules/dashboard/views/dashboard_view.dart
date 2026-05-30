@@ -99,14 +99,25 @@ class DashboardView extends StatelessWidget {
                           // NEW: Clickable & Color Dynamic Punch Indicator
                           // DashboardView ke andar Punch Button ka logic replace karein:
 
+                          // Part of your dashboard_view.dart layout file
+
+                          // Part of modules/dashboard/views/dashboard_view.dart
+
+                          // Part of modules/dashboard/views/dashboard_view.dart
+
                           Obx(() {
-                            bool isIn =
-                                controller.currentPunchStatus.value == "in";
+                            // Enforce a safe lowercase validation for UI representation
+                            final String rawStatus = controller
+                                .currentPunchStatus.value
+                                .toString()
+                                .toLowerCase()
+                                .trim();
+                            final bool isIn = rawStatus == "in";
+
                             return InkWell(
                               onTap: controller.isPunching.value
                                   ? null
                                   : () {
-                                      // Confirmation Dialog before Punching
                                       Get.defaultDialog(
                                         title: isIn
                                             ? (controller.isHindi.value
@@ -128,55 +139,73 @@ class DashboardView extends StatelessWidget {
                                         buttonColor:
                                             isIn ? Colors.red : Colors.green,
                                         onConfirm: () {
-                                          Get.back();
-                                          controller.handlePunchAction();
+                                          Get.back(); // Clear confirmation modal cleanly
+                                          controller
+                                              .handlePunchAction(); // Fire synchronized operation
                                         },
                                       );
                                     },
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 300),
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 8),
+                                    horizontal: 16, vertical: 12),
                                 decoration: BoxDecoration(
                                   color: isIn
                                       ? Colors.green.withOpacity(0.1)
                                       : Colors.red.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(10),
+                                  borderRadius: BorderRadius.circular(14),
                                   border: Border.all(
-                                      color: isIn ? Colors.green : Colors.red,
-                                      width: 1.5),
+                                    color: isIn ? Colors.green : Colors.red,
+                                    width: 2,
+                                  ),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(
-                                        isIn
-                                            ? Icons.verified
-                                            : Icons.login_rounded,
-                                        size: 16,
-                                        color:
-                                            isIn ? Colors.green : Colors.red),
-                                    const SizedBox(width: 8),
+                                    controller.isPunching.value
+                                        ? SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: isIn
+                                                  ? Colors.green
+                                                  : Colors.red,
+                                            ),
+                                          )
+                                        : Icon(
+                                            isIn
+                                                ? Icons.verified_user_rounded
+                                                : Icons
+                                                    .radio_button_off_rounded,
+                                            size: 18,
+                                            color: isIn
+                                                ? Colors.green
+                                                : Colors.red,
+                                          ),
+                                    const SizedBox(width: 10),
                                     Text(
-                                      isIn
-                                          ? (controller.isHindi.value
-                                              ? "सक्रिय: पंच-आउट"
-                                              : "ACTIVE: PUNCH OUT")
-                                          : (controller.isHindi.value
-                                              ? "काम शुरू: पंच-इन"
-                                              : "START: PUNCH IN"),
+                                      controller.isPunching.value
+                                          ? "SYNCING..."
+                                          : (isIn
+                                              ? (controller.isHindi.value
+                                                  ? "सक्रिय: ड्युटी पर"
+                                                  : "ACTIVE: LOGGED IN")
+                                              : (controller.isHindi.value
+                                                  ? "शुरू करें: पंच इन"
+                                                  : "OFFLINE: PUNCH IN")),
                                       style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color:
-                                              isIn ? Colors.green : Colors.red),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: isIn ? Colors.green : Colors.red,
+                                        letterSpacing: 0.5,
+                                      ),
                                     ),
                                   ],
                                 ),
                               ),
                             );
                           }),
-
                           const SizedBox(height: 15),
 
                           // Stats Metrics
