@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
@@ -42,8 +43,8 @@ class ApiService {
           handler.next(options);
         },
         onError: (error, handler) {
-          print("API ERROR => ${error.message}");
-          print("API RESPONSE => ${error.response?.data}");
+          debugPrint("API ERROR => ${error.message}");
+          debugPrint("API RESPONSE => ${error.response?.data}");
           handler.next(error);
         },
       ),
@@ -179,7 +180,7 @@ class ApiService {
       }
       return [];
     } catch (e) {
-      print("GET PREMISES ERROR => $e");
+      debugPrint("GET PREMISES ERROR => $e");
       return [];
     }
   }
@@ -221,7 +222,7 @@ class ApiService {
 
       return allTasks;
     } catch (e) {
-      print("GET TASKS ERROR => $e");
+      debugPrint("GET TASKS ERROR => $e");
 
       throw Exception("Failed to load tasks");
     }
@@ -238,21 +239,12 @@ class ApiService {
     required String username,
   }) async {
     try {
-      final now = DateTime.now();
-      final today =
-          "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
-
-      // Filter Logic:
-      // 1. utedb_madb must belong to a task where whos_who2 is our current user
-      // // 2. utedb_created date must be today
-      // final String whereClause =
-      //     "utedb_madb IN (SELECT madb_id FROM madb WHERE madb_who2='$username') "
-      //     "AND DATE(utedb_created)='$today'";
+      final whosId = await StorageService.getWhosId();
 
       final response = await getTableData(
         tableName: "utedb",
         username: username,
-        // customWhere: "DATE(utedb_created)='$today'",
+        customWhere: "utedb_whos_id='$whosId'",
       );
 
       if (response['status'] == true && response['response']?['Error'] == "0") {
@@ -260,7 +252,7 @@ class ApiService {
       }
       return [];
     } catch (e) {
-      print("TODAY COMPLETED TASK ERROR => $e");
+      debugPrint("TODAY COMPLETED TASK ERROR => $e");
       return [];
     }
   }
@@ -289,7 +281,7 @@ class ApiService {
 
       return "out";
     } catch (e) {
-      print("PUNCH STATUS ERROR => $e");
+      debugPrint("PUNCH STATUS ERROR => $e");
 
       return "out";
     }
@@ -307,7 +299,14 @@ class ApiService {
     required String whosId,
   }) async {
     try {
-      // final token = await StorageService.getToken();
+      if (username.trim().isEmpty ||
+          accessToken.trim().isEmpty ||
+          type.trim().isEmpty ||
+          premiseId.trim().isEmpty ||
+          whosId.trim().isEmpty) {
+        debugPrint("❌ PUNCH ABORTED: Missing required fields! (username: '$username', type: '$type', premiseId: '$premiseId', whosId: '$whosId')");
+        return false;
+      }
 
       final response = await dio.post(
         createRecordUrl,
@@ -325,7 +324,7 @@ class ApiService {
 
       return response.data['status'] == true;
     } catch (e) {
-      print("PUNCH ERROR => $e");
+      debugPrint("PUNCH ERROR => $e");
 
       return false;
     }
@@ -335,21 +334,19 @@ class ApiService {
   // UPDATE GOOGLE TOKEN
   // =====================================================
 
-  Future<bool> updateWhosGoogleToken(
-      {required String username,
-      required String accessToken,
-      required String whosId,
-      required String googleToken,
-      String? firstUser,
-      String? firstToken}) async {
+  Future<bool> updateWhosGoogleToken({
+    required String username,
+    required String accessToken,
+    required String whosId,
+    required String googleToken,
+  }) async {
     try {
       final response = await dio.post(
         "edit_record.php",
         data: {
           "table_name": "whos",
-          "username":
-              firstUser ?? await StorageService.getFirstUser(), //username,
-          "access_token": firstToken ?? await StorageService.getFirstToken(),
+          "username": username,
+          "access_token": accessToken,
           "selected_id": whosId,
           "data": {
             "whos_swg_token": googleToken,
@@ -357,11 +354,11 @@ class ApiService {
         },
       );
 
-      print(response.data);
+      debugPrint("UPDATE GOOGLE TOKEN RESPONSE => ${response.data}");
 
       return response.data["response"]?["Error"] == "0";
     } catch (e) {
-      print(e);
+      debugPrint("UPDATE GOOGLE TOKEN ERROR => $e");
 
       return false;
     }
@@ -377,26 +374,37 @@ class ApiService {
     required String premiseId,
     required String howsJsonString,
     File? imageFile,
+    String? precomputedBase64Image,
+    double? precomputedLat,
+    double? precomputedLng,
   }) async {
     try {
       final token = await StorageService.getToken();
-      double latitude = 0.0;
-      double longitude = 0.0;
+      final whosId = await StorageService.getWhosId();
+      double latitude = precomputedLat ?? 0.0;
+      double longitude = precomputedLng ?? 0.0;
 
-      try {
-        final position = await LocationService.determinePosition();
-        latitude = position.latitude;
-        longitude = position.longitude;
-      } catch (e) {
-        print("LOCATION FETCH ERROR => $e");
+      if (precomputedLat == null && precomputedLng == null) {
+        try {
+          final position = await LocationService.determinePosition();
+          latitude = position.latitude;
+          longitude = position.longitude;
+        } catch (e) {
+          debugPrint("LOCATION FETCH ERROR => $e");
+        }
       }
 
-      String base64Image = "";
+      String base64Image = precomputedBase64Image ?? "";
 
-      if (imageFile != null) {
+      if (imageFile != null && precomputedBase64Image == null) {
         final compressedImage = await compressImage(imageFile);
         List<int> imageBytes = await compressedImage.readAsBytes();
         base64Image = "data:image/jpg;base64,${base64Encode(imageBytes)}";
+      }
+
+      String finalPremiseId = premiseId;
+      if (finalPremiseId.trim().isEmpty) {
+        finalPremiseId = await StorageService.getWhosPremise();
       }
 
       Map<String, dynamic> requestPayload = {
@@ -405,9 +413,10 @@ class ApiService {
         "access_token": token,
         "data": {
           "utedb_madb": madbId,
-          "utedb_premises_id": premiseId,
+          "utedb_premises_id": finalPremiseId,
           "utedb_proof_image": base64Image,
           "utedb_hows1": howsJsonString,
+          "utedb_whos_id": whosId,
           "latitude": latitude,
           "longitude": longitude,
         },
@@ -427,7 +436,7 @@ class ApiService {
         response.data,
       );
     } catch (e) {
-      print("COMPLETE TASK ERROR => $e");
+      debugPrint("COMPLETE TASK ERROR => $e");
 
       throw Exception("Task completion failed");
     }
@@ -456,7 +465,7 @@ class ApiService {
 
       return File(compressed.path);
     } catch (e) {
-      print("IMAGE COMPRESS ERROR => $e");
+      debugPrint("IMAGE COMPRESS ERROR => $e");
 
       return file;
     }

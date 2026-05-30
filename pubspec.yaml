@@ -7,6 +7,7 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
+  crypto: ^3.0.3
   get: ^4.6.6
   dio: ^5.4.0
   flutter_animate: ^4.5.0
@@ -51,16 +52,30 @@ dependencies:
   firebase_auth:
   firebase_messaging: 
   geofence_service: 
+  google_sign_in: ^6.2.1
+  flutter_native_splash: ^2.4.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
 
   assets:
     - assets/images/
-    # - assets/lottie/
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/vtap_logo.png"
+
+flutter_native_splash:
+  color: "#121212"
+  image: "assets/images/vtap_logo.png"
+  android_12:
+    image: "assets/images/vtap_logo.png"
+    color: "#121212"

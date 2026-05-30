@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 
 class TaskModel {
   final String id;
@@ -6,6 +7,7 @@ class TaskModel {
   final String taskHindi;
   final String whenSession;
   final String whenTime;
+  final String frequency;
   final String where;
   final String which;
   final String who;
@@ -21,6 +23,15 @@ class TaskModel {
   Map<String, bool> howsJson = {};
   List<String> get stepList =>
       hows.split('\n').where((s) => s.trim().isNotEmpty).toList();
+
+  bool get isUploadProofTask =>
+      howrMethod.toLowerCase().contains("upload") ||
+      howrMethod.toLowerCase().contains("image") ||
+      howrMethod.toLowerCase().contains("proof");
+
+  bool get isExternalFormTask => howrUrl.trim().isNotEmpty;
+
+  bool get isSimpleTask => !isUploadProofTask && !isExternalFormTask;
 
   // Dynamic Score Calculation Method
   double get score {
@@ -53,6 +64,7 @@ class TaskModel {
     required this.taskHindi,
     required this.whenSession,
     required this.whenTime,
+    required this.frequency,
     required this.where,
     required this.which,
     required this.who,
@@ -75,6 +87,7 @@ class TaskModel {
       taskHindi: json['whats_what2'] ?? "",
       whenSession: json['whens_when2'] ?? "",
       whenTime: json['whens_when3'] ?? "",
+      frequency: json['whens_when1']?.toString() ?? "Daily",
       where: "${json['wheres_where1'] ?? ""} ${json['wheres_where2'] ?? ""}"
           .trim(),
       which: json['whichs_which1'] ?? "",
@@ -101,7 +114,7 @@ class TaskModel {
         }
         // Note: Score automatic calculate ho jayega stepCheckstates se
       } catch (e) {
-        print("JSON SYNC ERROR => $e");
+        debugPrint("JSON SYNC ERROR => $e");
       }
     }
     return task;

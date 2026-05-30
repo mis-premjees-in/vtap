@@ -1,6 +1,7 @@
 // modules/dashboard/controllers/dashboard_controller.dart
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -8,22 +9,33 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:dio/dio.dart';
 import 'package:vtap/core/services/notification_service.dart';
 import 'package:vtap/modules/presence/controller/presence_controller.dart';
 
 import '../../../core/services/api_service.dart';
+import '../../../core/services/google_auth_service.dart';
 import '../../../core/services/storage_service.dart';
+import '../../../core/services/location_service.dart';
+import '../../../core/services/location_bg_service.dart';
+import '../../../core/services/offline_queue_service.dart';
 import '../../../data/models/task_model.dart';
+import '../../../data/repositories/task_repository.dart';
 import '../../../routes/app_routes.dart';
-import 'package:geolocator/geolocator.dart';
 
 class DashboardController extends GetxController {
   final ApiService _apiService = ApiService();
+  final TaskRepository _taskRepository = TaskRepository();
+  final OfflineQueueService _offlineQueueService = OfflineQueueService.to;
   final PresenceController _presenceController = Get.put(PresenceController());
 
   RxBool isLoading = false.obs;
   RxBool isPunching = false.obs;
   RxBool isHindi = false.obs;
+  RxBool isAdmin = false.obs;
+  final RxBool isSyncingCalendar = false.obs;
 
   // Track state safely using camel-case defaults matching your database logs
   RxString currentPunchStatus = "Out".obs;
@@ -35,6 +47,12 @@ class DashboardController extends GetxController {
   Timer? highlightTimer;
   Timer? reminderTimer;
 
+  RxInt activeTabIndex = 0.obs;
+
+  void changeTab(int index) {
+    activeTabIndex.value = index;
+  }
+
   @override
   void onInit() {
     super.onInit();
@@ -43,21 +61,25 @@ class DashboardController extends GetxController {
     startReminderChecker();
 
     // Listen for background auto-punch status broadcasts
-    FlutterBackgroundService().on('updatePunchState').listen((event) {
-      if (event != null && event['status'] != null) {
-        String updatedStatus = event['status'].toString().trim();
-        _updateLocalPunchState(updatedStatus);
-      }
-    });
+    if (!kIsWeb) {
+      FlutterBackgroundService().on('updatePunchState').listen((event) async {
+        if (event != null && event['status'] != null) {
+          String updatedStatus = event['status'].toString().trim();
+          await StorageService.addLog("Foreground App: Received 'updatePunchState' from background isolate ($updatedStatus)");
+          _updateLocalPunchState(updatedStatus);
+        }
+      });
+    }
   }
 
   Future<void> loadInitialData() async {
     try {
       isLoading.value = true;
+      isAdmin.value = await StorageService.isAdmin();
       await loadPunchStatus();
       await fetchTasks(showLoader: false);
     } catch (e) {
-      print("INITIALIZATION STEP SEVERE INTERCEPT => $e");
+      debugPrint("INITIALIZATION STEP SEVERE INTERCEPT => $e");
     } finally {
       isLoading.value = false;
     }
@@ -72,7 +94,7 @@ class DashboardController extends GetxController {
   //     currentPunchStatus.value = "Out";
   //   }
   //   currentPunchStatus.refresh();
-  //   print(
+  //   debugPrint(
   //       "🎯 PUNCH STATE REALIZED IN CONTROLLER STACK => ${currentPunchStatus.value}");
   // }
   // =========================================================================
@@ -101,7 +123,7 @@ class DashboardController extends GetxController {
   //     // 2. Explicitly determine forced target state parameter to send to database
   //     final String targetForceType = currentlyPunchedIn ? "Out" : "In";
 
-  //     print("📤 UI Triggered Action! Current State: '$rawStatus'. Sending Explicit Force Type: '$targetForceType'");
+  //     debugPrint("📤 UI Triggered Action! Current State: '$rawStatus'. Sending Explicit Force Type: '$targetForceType'");
 
   //     // 3. Fire sequence tracking flow using direct parameterized tracking arguments
   //     await _presenceController.handlePunchToggle(
@@ -112,7 +134,7 @@ class DashboardController extends GetxController {
   //       },
   //     );
   //   } catch (e) {
-  //     print("PUNCH INTERFACE ERROR => $e");
+  //     debugPrint("PUNCH INTERFACE ERROR => $e");
   //   } finally {
   //     isPunching.value = false;
   //     await fetchTasks(showLoader: false); // Refreshes task metrics list fields smoothly on finish
@@ -121,14 +143,6 @@ class DashboardController extends GetxController {
 
   // =========================================================================
   // ATTENDANCE PIPELINE (SYNCHRONIZED ON TOGGLE COMPLETION)
-  // =========================================================================
-  // =========================================================================
-  // ATTENDANCE PIPELINE (FORCING EXPLICIT "In" / "Out" DATABASE STRINGS)
-  // =========================================================================
-  // =========================================================================
-  // ATTENDANCE PIPELINE WITH MASTER GEOLOCATION LOCKING (5 METERS)
-  // =========================================================================
-  // =========================================================================
   // ATTENDANCE PIPELINE WITH MASTER GEOLOCATION LOCKING (ANY PREMISE <= 5M)
   // =========================================================================
   Future<void> handlePunchAction() async {
@@ -137,150 +151,54 @@ class DashboardController extends GetxController {
       final username = await StorageService.getUsername();
       if (username.isEmpty) return;
 
-      // 1. Check what the current UI state is BEFORE sending to database
-      final String rawStatus =
-          currentPunchStatus.value.toString().toLowerCase().trim();
+      // 1. Check what the current UI state reflects BEFORE executing database pipeline logic
+      final String rawStatus = currentPunchStatus.value.toString().toLowerCase().trim();
       final bool currentlyPunchedIn = rawStatus == "in";
 
-      // 2. Determine explicitly what to send to the database (with First Letter Capital)
+      // 2. Explicitly determine forced target state parameter to send to database
       final String targetForceType = currentlyPunchedIn ? "Out" : "In";
 
-      print(
-          "📤 UI Action Triggered! Current state: '$rawStatus'. Sending Explicit Force Type: '$targetForceType'");
+      debugPrint("📤 UI Triggered Action! Current State: '$rawStatus'. Sending Explicit Force Type: '$targetForceType'");
 
-      // 3. FETCH REGISTERED PREMISES VIA THE CORE API
-      List premises = await _apiService.getPremises(username: username);
-      if (premises.isEmpty) {
-        Get.snackbar("Error", "No registered premises found for your profile.");
-        return;
-      }
+      // 3. Delegate to the presence controller which coordinates geolocation validation
+      await _presenceController.handlePunchToggle(
+        username,
+        forceType: targetForceType,
+        onPunchSuccess: (String liveStatusFromServer) async {
+          _updateLocalPunchState(liveStatusFromServer);
 
-      // 4. GEOLOCATION PERMISSIONS VALIDATION SECURITY CHECK
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          Get.snackbar(
-              "Location Error", "Location permission dena zaroori hai.");
-          return;
-        }
-      }
+          // Persist the status for cross-isolate visibility
+          await StorageService.saveAttendanceStatus(liveStatusFromServer);
 
-      // 5. CAPTURE HIGH ACCURACY CURRENT LOCATION
-      Position? currentPos;
-      try {
-        currentPos = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-          timeLimit: const Duration(seconds: 7),
-        );
-      } catch (_) {
-        currentPos = await Geolocator.getLastKnownPosition();
-      }
-
-      if (currentPos == null) {
-        Get.snackbar("Location Error",
-            "Aapka dynamic hardware GPS respond nahi kar raha hai. Kripya location toggle switch off/on karein.");
-        return;
-      }
-
-      // 6. LOOP THROUGH ALL PREMISES TO CHECK IF USER IS WITHIN 5 METERS OF ANY PREMISE
-      bool isInsideAnyPremise = false;
-      var matchedPremise;
-      double closestDistance = double.infinity;
-
-      for (var premise in premises) {
-        try {
-          double shopLat =
-              double.parse(premise['premises_latitude'].toString());
-          double shopLng =
-              double.parse(premise['premises_longitude'].toString());
-
-          double distance = Geolocator.distanceBetween(
-            currentPos.latitude,
-            currentPos.longitude,
-            shopLat,
-            shopLng,
-          );
-
-          // Track the closest shop distance to display in the error dialog if all fail
-          if (distance < closestDistance) {
-            closestDistance = distance;
+           // Update the background service isolate dynamically
+          if (!kIsWeb) {
+            try {
+              if (liveStatusFromServer.toLowerCase() == "in") {
+                await LocationService.requestBackgroundLocationPermission();
+              }
+              await LocationBgService.startServiceIfPermissionsGranted();
+              await StorageService.addLog("Foreground App: Syncing background tracking status to '$liveStatusFromServer'");
+              FlutterBackgroundService().invoke('updatePunchStatus', {'status': liveStatusFromServer});
+              if (liveStatusFromServer.toLowerCase() == "in") {
+                await StorageService.addLog("Foreground App: Invoking startTracking on background service");
+                FlutterBackgroundService().invoke('startTracking');
+              } else {
+                await StorageService.addLog("Foreground App: Invoking stopTracking on background service");
+                FlutterBackgroundService().invoke('stopTracking');
+                await LocationBgService.stopNativeService();
+              }
+            } catch (bgError) {
+              await StorageService.addLog("Foreground App: Background tracking sync invoke failed: $bgError");
+              debugPrint("Background service tracking sync failed: $bgError");
+            }
           }
-
-          if (distance <= 10.0) {
-            isInsideAnyPremise = true;
-            matchedPremise = premise;
-            debugPrint(
-                "📍 Target Lock! Matched Premise: ${premise['premises_name']} at ${distance.toStringAsFixed(2)} meters");
-            break; // Valid premise found, exit loop immediately
-          }
-        } catch (e) {
-          print("Error checking individual premise coordinates: $e");
-        }
-      }
-
-      // 7. STRICT RADIUS COUNTER LOCKOUT CONDITION VERIFICATION
-      if (isInsideAnyPremise && matchedPremise != null) {
-        String premiseId = matchedPremise['premises_id'].toString();
-
-        // Pass the target state explicitly to the presence controller
-        await _presenceController.handlePunchToggle(
-          username,
-          forceType: targetForceType, // 🔥 Guarantees correct casing
-          onPunchSuccess: (String liveStatusFromServer) {
-            _updateLocalPunchState(liveStatusFromServer);
-          },
-        );
-      } else {
-        // Render range error warning modal showing the closest distance found
-        Get.defaultDialog(
-          title: "Location Range Error",
-          content: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Column(
-              children: [
-                const Icon(Icons.location_off,
-                    color: Colors.redAccent, size: 48),
-                const SizedBox(height: 12),
-                Text(
-                  "Aap kisi bhi assigned shop ke center point ke pass nahi hain.",
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, color: Colors.black87),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "Closest Shop Distance: ${closestDistance.toStringAsFixed(1)} meters door hain.",
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600, color: Colors.black54),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "Attendance strictly counter ke pass (5 meters ke andar) hi mark ho sakti hai. Kripya check karein ki aapka GPS Mode high accuracy par set hai.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-                ),
-              ],
-            ),
-          ),
-          textConfirm: "Retry Sync",
-          confirmTextColor: Colors.white,
-          buttonColor: Colors.deepOrange,
-          onConfirm: () {
-            Get.back();
-            handlePunchAction(); // Re-trigger the accurate check cleanly
-          },
-          textCancel: "Dismiss",
-          cancelTextColor: Colors.black87,
-        );
-      }
+        },
+      );
     } catch (e) {
-      print("PUNCH ACTION FAILURE INTERCEPT => $e");
+      debugPrint("PUNCH ACTION FAILURE INTERCEPT => $e");
     } finally {
       isPunching.value = false;
-      await fetchTasks(
-          showLoader: false); // Automatically refreshes list variables
+      await fetchTasks(showLoader: false); // Refreshes task metrics list fields smoothly on finish
     }
   }
 
@@ -290,9 +208,7 @@ class DashboardController extends GetxController {
       if (username.isEmpty) return;
 
       final status = await _apiService.getLastPunchStatus(username: username);
-      if (status != null) {
-        _updateLocalPunchState(status.toString());
-      }
+      _updateLocalPunchState(status);
     } catch (_) {
       currentPunchStatus.value = "Out"; // Fail-safe default
     }
@@ -307,81 +223,13 @@ class DashboardController extends GetxController {
       final username = await StorageService.getUsername();
       if (username.isEmpty) return;
 
-      final dynamic masterResponse =
-          await _apiService.getTasks(username: username);
-      final dynamic completedResponse =
-          await _apiService.getTodayCompletedTasks(username: username);
-
-      final Set<String> todayCompletedMadbIds = {};
-      final Map<String, String> utedbHowsMap = {};
-      final now = DateTime.now();
-      final String todayDateStr =
-          "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
-
-      // Safe evaluation array extraction for completed entries
-      List<dynamic> completedRecords = [];
-      if (completedResponse != null) {
-        if (completedResponse is List) {
-          completedRecords = completedResponse;
-        } else if (completedResponse is Map &&
-            completedResponse['response']?['Records'] is List) {
-          completedRecords = completedResponse['response']['Records'];
+      final mergedTasks = await _taskRepository.getTodayTasks(username);
+      // Mark tasks that are pending offline sync as completed locally
+      for (final task in mergedTasks) {
+        if (_offlineQueueService.isTaskPendingSync(task.id)) {
+          task.isCompleted = true;
         }
       }
-
-      for (final item in completedRecords) {
-        if (item is Map) {
-          String createdDate = item['utedb_created']?.toString() ?? "";
-          if (createdDate.startsWith(todayDateStr)) {
-            String mid = item['utedb_madb']?.toString() ?? "";
-            if (mid.isNotEmpty) {
-              todayCompletedMadbIds.add(mid);
-              if (item['utedb_hows1'] != null) {
-                utedbHowsMap[mid] = item['utedb_hows1'].toString();
-              }
-            }
-          }
-        }
-      }
-
-      // Safe evaluation array extraction for master records
-      List<dynamic> masterRecords = [];
-      if (masterResponse != null) {
-        if (masterResponse is List) {
-          masterRecords = masterResponse;
-        } else if (masterResponse is Map &&
-            masterResponse['response']?['Records'] is List) {
-          masterRecords = masterResponse['response']['Records'];
-        }
-      }
-
-      List<TaskModel> mergedTasks = [];
-      for (final item in masterRecords) {
-        try {
-          if (item is Map) {
-            Map<String, dynamic> taskData =
-                item.map((k, v) => MapEntry(k.toString(), v));
-            String tid = taskData['madb_id']?.toString() ?? "";
-
-            if (tid.isNotEmpty) {
-              bool isDone = todayCompletedMadbIds.contains(tid);
-              if (isDone && utedbHowsMap.containsKey(tid)) {
-                taskData['utedb_hows1'] = utedbHowsMap[tid];
-              }
-
-              final task = TaskModel.fromJson(taskData);
-              task.isCompleted = isDone;
-              mergedTasks.add(task);
-            }
-          }
-        } catch (innerMappingError) {
-          print(
-              "CORRUPTED RECORD ROW SKIPPED CORRECTION => $innerMappingError");
-        }
-      }
-
-      mergedTasks.sort((a, b) =>
-          a.isCompleted == b.isCompleted ? 0 : (a.isCompleted ? 1 : -1));
       tasks.assignAll(mergedTasks);
 
       _scheduleAllLocalReminders();
@@ -390,14 +238,18 @@ class DashboardController extends GetxController {
       int incompleteIdx = tasks.indexWhere((e) => !e.isCompleted);
       highlightedIndex.value =
           incompleteIdx != -1 ? incompleteIdx.clamp(0, tasks.length - 1) : 0;
+
+      // Auto Google Calendar Sync (silent) - Disabled for now
+      // syncTasksToGoogleCalendar(silent: true);
     } catch (e) {
-      print("CRITICAL TASKS PIPELINE FAILURE EXCEPTION INTERCEPTED => $e");
+      debugPrint("CRITICAL TASKS PIPELINE FAILURE EXCEPTION INTERCEPTED => $e");
     } finally {
       isLoading.value = false; // Always ensures loader dismisses gracefully
     }
   }
 
   void _scheduleAllLocalReminders() async {
+    if (kIsWeb) return;
     final now = DateTime.now();
     for (final task in tasks) {
       if (task.isCompleted || task.whenTime.isEmpty) continue;
@@ -407,19 +259,20 @@ class DashboardController extends GetxController {
         final taskDateTime = DateTime(now.year, now.month, now.day,
             int.parse(split[0]), int.parse(split[1]));
         await NotificationService.scheduleTaskReminder(
-          task.id.toString().hashCode,
-          isHindi.value ? task.taskHindi : task.taskEnglish,
-          taskDateTime,
+          id: task.id.toString().hashCode,
+          title: isHindi.value ? task.taskHindi : task.taskEnglish,
+          taskTime: taskDateTime,
+          frequency: task.frequency,
         );
       } catch (_) {}
     }
   }
 
-  Future<void> completeTask(TaskModel task) async {
+  Future<void> completeTask(TaskModel task, {File? imageFile}) async {
     try {
       // ✨ FIXED: Added case-insensitive normalization (.toLowerCase().trim())
       // This safely matches "In" or "in" and prevents the false "Attendance Required" dialog.
-      print("current status ${currentPunchStatus.value.toLowerCase().trim()}");
+      debugPrint("current status ${currentPunchStatus.value.toLowerCase().trim()}");
       if (currentPunchStatus.value.toLowerCase().trim() != "in") {
         Get.defaultDialog(
           title: "🔒 Attendance Required",
@@ -446,22 +299,52 @@ class DashboardController extends GetxController {
           barrierDismissible: false);
 
       final username = await StorageService.getUsername();
+      final whosPremiseId = await StorageService.getWhosPremise();
+      final targetPremiseId = task.premiseId.isNotEmpty ? task.premiseId : whosPremiseId;
 
-      bool isInsideTaskPerimeter = await _presenceController
-          .isUserWithinTaskRadius(username, task.premiseId);
-      if (!isInsideTaskPerimeter) {
-        if (Get.isDialogOpen ?? false) Get.back();
-        Get.defaultDialog(
-          title: "📍 Location Error",
-          middleText:
-              "Aap is task ko complete nahi kar sakte kyunki aap shop ki assigned perimeter range se bahar hain.",
+      // Check network connectivity
+      final connectivityResult = await Connectivity().checkConnectivity();
+      final bool isOffline =
+          connectivityResult.contains(ConnectivityResult.none) ||
+              connectivityResult.isEmpty;
+
+      double latitude = 0.0;
+      double longitude = 0.0;
+
+      // Acquire location details (satellite GPS does not require internet)
+      try {
+        final position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 5),
         );
-        return;
+        latitude = position.latitude;
+        longitude = position.longitude;
+      } catch (_) {
+        try {
+          final lastKnown = await Geolocator.getLastKnownPosition();
+          if (lastKnown != null) {
+            latitude = lastKnown.latitude;
+            longitude = lastKnown.longitude;
+          }
+        } catch (_) {}
       }
 
-      File? imageFile;
-      if (task.howrMethod.toLowerCase().contains("upload") ||
-          task.howrMethod.toLowerCase().contains("image")) {
+      // Proximity Check (only if online since we need registered premise bounds from API)
+      if (!isOffline) {
+        bool isInsideTaskPerimeter = await _presenceController
+            .isUserWithinTaskRadius(username, targetPremiseId);
+        if (!isInsideTaskPerimeter) {
+          if (Get.isDialogOpen ?? false) Get.back();
+          Get.defaultDialog(
+            title: "📍 Location Error",
+            middleText:
+                "Aap is task ko complete nahi kar sakte kyunki aap shop ki assigned perimeter range se bahar hain.",
+          );
+          return;
+        }
+      }
+
+      if (task.isUploadProofTask && imageFile == null) {
         imageFile = await pickImage();
         if (imageFile == null) {
           if (Get.isDialogOpen ?? false) Get.back();
@@ -469,9 +352,10 @@ class DashboardController extends GetxController {
         }
       }
 
-      if (task.howrUrl.trim().isNotEmpty) {
+      if (task.isExternalFormTask) {
+        // Use LaunchMode.inAppBrowserView to keep user inside the app container
         await launchUrl(Uri.parse(task.howrUrl.trim()),
-            mode: LaunchMode.externalApplication);
+            mode: LaunchMode.inAppBrowserView);
         if (Get.isDialogOpen ?? false) Get.back();
 
         final bool? submitted = await Get.dialog<bool>(
@@ -493,26 +377,86 @@ class DashboardController extends GetxController {
             barrierDismissible: false);
       }
 
-      final response = await _apiService.completeTask(
-        username: username,
-        madbId: task.id.toString(),
-        premiseId: task.premiseId,
-        howsJsonString: task.getHowsJsonString,
-        imageFile: imageFile,
-      );
+      // If hard-offline, save directly to queue and simulate completion locally
+      if (isOffline) {
+        String base64Image = "";
+        if (imageFile != null) {
+          final compressedImage = await _apiService.compressImage(imageFile);
+          List<int> imageBytes = await compressedImage.readAsBytes();
+          base64Image = "data:image/jpg;base64,${base64Encode(imageBytes)}";
+        }
 
-      if (Get.isDialogOpen ?? false) Get.back();
+        final submission = OfflineTaskSubmission(
+          username: username,
+          madbId: task.id,
+          premiseId: targetPremiseId,
+          howsJsonString: task.getHowsJsonString,
+          base64Image: base64Image,
+          latitude: latitude,
+          longitude: longitude,
+          timestamp: DateTime.now().toIso8601String(),
+        );
 
-      if (response != null && response['status'] == true) {
+        if (Get.isDialogOpen ?? false) Get.back();
+        await _offlineQueueService.enqueueTask(submission);
+
         task.isCompleted = true;
         tasks.refresh();
-        Get.snackbar("Success", "Task saved successfully",
-            backgroundColor: Colors.green, colorText: Colors.white);
-        await fetchTasks(showLoader: false);
+        return;
+      }
+
+      // Try submitting online. Fallback to offline queue on network/connection exception
+      try {
+        final response = await _taskRepository.completeTask(
+          username: username,
+          madbId: task.id.toString(),
+          premiseId: targetPremiseId,
+          howsJsonString: task.getHowsJsonString,
+          imageFile: imageFile,
+        );
+
+        if (Get.isDialogOpen ?? false) Get.back();
+
+        if (response['status'] == true) {
+          task.isCompleted = true;
+          tasks.refresh();
+          Get.snackbar("Success", "Task saved successfully",
+              backgroundColor: Colors.green, colorText: Colors.white);
+          await fetchTasks(showLoader: false);
+        } else {
+          Get.snackbar(
+              "Error", response['response']?['Message'] ?? "Submission failed",
+              backgroundColor: Colors.red, colorText: Colors.white);
+        }
+      } catch (networkError) {
+        if (Get.isDialogOpen ?? false) Get.back();
+        debugPrint("API completion error, enqueuing offline task: $networkError");
+
+        String base64Image = "";
+        if (imageFile != null) {
+          final compressedImage = await _apiService.compressImage(imageFile);
+          List<int> imageBytes = await compressedImage.readAsBytes();
+          base64Image = "data:image/jpg;base64,${base64Encode(imageBytes)}";
+        }
+
+        final submission = OfflineTaskSubmission(
+          username: username,
+          madbId: task.id,
+          premiseId: targetPremiseId,
+          howsJsonString: task.getHowsJsonString,
+          base64Image: base64Image,
+          latitude: latitude,
+          longitude: longitude,
+          timestamp: DateTime.now().toIso8601String(),
+        );
+
+        await _offlineQueueService.enqueueTask(submission);
+        task.isCompleted = true;
+        tasks.refresh();
       }
     } catch (e) {
       if (Get.isDialogOpen ?? false) Get.back();
-      print("TASK ERROR => $e");
+      debugPrint("TASK ERROR => $e");
     } finally {
       completingTasks.remove(task.id);
     }
@@ -521,6 +465,19 @@ class DashboardController extends GetxController {
   Future<void> logoutUser() async {
     Get.dialog(const Center(child: CircularProgressIndicator()),
         barrierDismissible: false);
+
+    // Stop background tracking on logout
+    if (!kIsWeb) {
+      try {
+        await StorageService.addLog("Foreground App: Stopping background service on logout");
+        FlutterBackgroundService().invoke('stopTracking');
+        await LocationBgService.stopNativeService();
+      } catch (e) {
+        await StorageService.addLog("Foreground App: Failed to stop background tracking on logout: $e");
+        debugPrint("Failed to stop background tracking on logout: $e");
+      }
+    }
+
     await StorageService.clearAll();
     Get.offAllNamed(AppRoutes.login);
   }
@@ -574,5 +531,122 @@ class DashboardController extends GetxController {
     highlightTimer?.cancel();
     reminderTimer?.cancel();
     super.onClose();
+  }
+
+  Future<void> syncTasksToGoogleCalendar({bool silent = false}) async {
+    try {
+      if (!silent) isSyncingCalendar.value = true;
+      String googleToken = await GoogleAuthService.getOrRefreshAccessToken();
+      if (googleToken.isEmpty) {
+        if (silent) return; // Silent execution returns immediately on missing credentials
+        final user = await GoogleAuthService.signInWithGoogle();
+        if (user == null) {
+          Get.snackbar("Auth Error", "Google Authentication failed or was cancelled.",
+              backgroundColor: Colors.red, colorText: Colors.white);
+          return;
+        }
+        googleToken = await GoogleAuthService.getOrRefreshAccessToken();
+      }
+
+      if (googleToken.isEmpty) {
+        if (!silent) {
+          Get.snackbar("Auth Error", "Could not retrieve Google Access Token.",
+              backgroundColor: Colors.red, colorText: Colors.white);
+        }
+        return;
+      }
+
+      int syncedCount = 0;
+      for (final task in tasks) {
+        if (task.isCompleted || task.whenTime.isEmpty) continue;
+
+        final split = task.whenTime.split(":");
+        if (split.length < 2) continue;
+        final hour = int.parse(split[0]);
+        final minute = int.parse(split[1]);
+
+        final now = DateTime.now();
+        final eventStart = DateTime(now.year, now.month, now.day, hour, minute);
+        final eventEnd = eventStart.add(const Duration(minutes: 30));
+
+        List<String> recurrence = [];
+        final freq = task.frequency.toLowerCase().trim();
+        if (freq == "daily") {
+          recurrence.add("RRULE:FREQ=DAILY");
+        } else if (freq == "weekly") {
+          recurrence.add("RRULE:FREQ=WEEKLY");
+        } else if (freq == "monthly") {
+          recurrence.add("RRULE:FREQ=MONTHLY");
+        } else {
+          recurrence.add("RRULE:FREQ=DAILY");
+        }
+
+        final cleanId = "vtap${task.id.toLowerCase().replaceAll(RegExp(r'[^a-v0-9]'), '')}";
+
+        final payload = {
+          "id": cleanId,
+          "summary": isHindi.value ? task.taskHindi : task.taskEnglish,
+          "description": "VTAP Task Verification\nSession: ${task.whenSession}\nMethod: ${task.howrMethod}\nWhere: ${task.where}",
+          "start": {
+            "dateTime": eventStart.toUtc().toIso8601String().replaceAll('Z', '+00:00'),
+            "timeZone": "UTC"
+          },
+          "end": {
+            "dateTime": eventEnd.toUtc().toIso8601String().replaceAll('Z', '+00:00'),
+            "timeZone": "UTC"
+          },
+          "recurrence": recurrence,
+          "reminders": {
+            "useDefault": false,
+            "overrides": [
+              {
+                "method": "popup",
+                "minutes": 5
+              }
+            ]
+          }
+        };
+
+        final url = "https://www.googleapis.com/calendar/v3/calendars/primary/events/$cleanId";
+
+        try {
+          final response = await _apiService.dio.put(
+            url,
+            data: jsonEncode(payload),
+            options: Options(
+              headers: {
+                "Authorization": "Bearer $googleToken",
+                "Content-Type": "application/json",
+              },
+            ),
+          );
+          if (response.statusCode == 200 || response.statusCode == 201) {
+            syncedCount++;
+          }
+        } catch (dioError) {
+          if (dioError is DioException && dioError.response?.statusCode == 401) {
+            await StorageService.saveGoogleAccessToken("");
+            if (!silent) {
+              Get.snackbar("Auth Expired", "Google Session expired. Please try syncing again to re-authenticate.",
+                  backgroundColor: Colors.orange.shade800, colorText: Colors.white);
+            }
+            return;
+          }
+          debugPrint("Failed to sync task ${task.id} to Google Calendar: $dioError");
+        }
+      }
+
+      if (!silent) {
+        Get.snackbar("Google Calendar Sync", "$syncedCount tasks successfully synced to Google Calendar!",
+            backgroundColor: Colors.green, colorText: Colors.white);
+      }
+    } catch (e) {
+      if (!silent) {
+        Get.snackbar("Sync Error", "Google Calendar Sync failed: $e",
+            backgroundColor: Colors.red, colorText: Colors.white);
+      }
+    } finally {
+      if (!silent) isSyncingCalendar.value = false;
+    }
   }
 }

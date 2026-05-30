@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -28,7 +29,7 @@ class NotificationService {
     await _notificationsPlugin.initialize(
       initializationSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
-        print("Notification Clicked: ${response.payload}");
+        debugPrint("Notification Clicked: ${response.payload}");
       },
     );
 
@@ -48,20 +49,35 @@ class NotificationService {
         ?.createNotificationChannel(channel);
   }
 
-  static Future<void> scheduleTaskReminder(
-      int id, String title, DateTime taskTime) async {
-    // Task time se 10 minute pehle ka time calculate karein
+  static Future<void> scheduleTaskReminder({
+    required int id,
+    required String title,
+    required DateTime taskTime,
+    required String frequency,
+  }) async {
     final scheduleTime = tz.TZDateTime.from(
-      taskTime.subtract(const Duration(minutes: 5)),
+      taskTime.subtract(const Duration(minutes: 3)),
       tz.local,
     );
 
-    if (scheduleTime.isAfter(DateTime.now())) {
+    var targetScheduleTime = scheduleTime;
+    final freq = frequency.toLowerCase().trim();
+    final nowTz = tz.TZDateTime.now(tz.local);
+
+    if (targetScheduleTime.isBefore(nowTz)) {
+      if (freq == "daily") {
+        targetScheduleTime = targetScheduleTime.add(const Duration(days: 1));
+      } else if (freq == "weekly") {
+        targetScheduleTime = targetScheduleTime.add(const Duration(days: 7));
+      }
+    }
+
+    if (targetScheduleTime.isAfter(nowTz)) {
       await _notificationsPlugin.zonedSchedule(
         id,
         "Task Reminder (VTAP)",
-        "Aapka task '$title' 5 min mein shuru hone wala hai.",
-        scheduleTime,
+        "Aapka task '$title' 3 min mein shuru hone wala hai.",
+        targetScheduleTime,
         const NotificationDetails(
           android: AndroidNotificationDetails(
             'task_channel', // Matches the channel created in init()
@@ -75,10 +91,13 @@ class NotificationService {
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.absoluteTime,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        matchDateTimeComponents: freq == "daily"
+            ? DateTimeComponents.time
+            : (freq == "weekly" ? DateTimeComponents.dayOfWeekAndTime : null),
       );
-      print("Notification scheduled successfully for: $scheduleTime");
+      debugPrint("Notification scheduled successfully ($frequency) for: $targetScheduleTime");
     } else {
-      print("Warning: Scheduled time is in the past! Notification not set.");
+      debugPrint("Warning: Scheduled time is in the past! Notification not set.");
     }
   }
 }

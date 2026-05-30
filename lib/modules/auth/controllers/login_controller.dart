@@ -2,12 +2,15 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:get/get.dart';
 
 import '../../../core/services/google_auth_service.dart';
 import '../../../core/services/location_service.dart';
 import '../../../core/services/storage_service.dart';
+import '../../../core/services/location_bg_service.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../routes/app_routes.dart';
 
@@ -48,6 +51,7 @@ class LoginController extends GetxController {
       if (token.isEmpty) throw Exception("Token missing");
 
       String whosId = "";
+      String whosPremise = "";
       final whosResponse = await repository.apiService.getTableData(
         tableName: "whos",
         username: username,
@@ -59,7 +63,38 @@ class LoginController extends GetxController {
         final records = whosResponse['response']['Records'] as List;
         if (records.isNotEmpty) {
           whosId = records.first['whos_id']?.toString() ?? '';
+          whosPremise = records.first['whos_premise']?.toString() ?? '';
         }
+      }
+
+      final groupId = userData['groupID']?.toString() ?? '';
+
+      // Request notification permission and retrieve FCM token
+      String? fcmDeviceToken;
+      try {
+        final NotificationSettings settings =
+            await FirebaseMessaging.instance.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+        if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+          fcmDeviceToken = await FirebaseMessaging.instance.getToken();
+          debugPrint("REAL FCM DEVICE TOKEN => $fcmDeviceToken");
+        }
+      } catch (fcmError) {
+        debugPrint("Error fetching FCM token: $fcmError");
+      }
+
+      if (whosId.isNotEmpty &&
+          fcmDeviceToken != null &&
+          fcmDeviceToken.isNotEmpty) {
+        await repository.apiService.updateWhosGoogleToken(
+          username: memberId,
+          accessToken: token,
+          whosId: whosId,
+          googleToken: fcmDeviceToken,
+        );
       }
 
       await StorageService.saveLoginData(
@@ -67,13 +102,42 @@ class LoginController extends GetxController {
         username: username,
         userId: memberId,
         whosId: whosId,
+        groupId: groupId,
+        whosPremise: whosPremise,
       );
+
+      if (whosId.trim().isEmpty) {
+        Get.snackbar("Warning", "Mapped profile not found (Missing Whos ID). Attendance features will be locked.",
+            backgroundColor: Colors.amber, colorText: Colors.black87, duration: const Duration(seconds: 5));
+      }
 
       final premises =
           await repository.apiService.getPremises(username: username);
+
+      // Save details of assigned premise to Storage for native Kotlin service
+      Map<String, dynamic>? matchingPremise;
+      for (final p in premises) {
+        if (p['premises_id']?.toString() == whosPremise) {
+          matchingPremise = Map<String, dynamic>.from(p);
+          break;
+        }
+      }
+
+      if (matchingPremise != null) {
+        final double? lat = double.tryParse(matchingPremise['premises_latitude']?.toString() ?? '');
+        final double? lng = double.tryParse(matchingPremise['premises_longitude']?.toString() ?? '');
+        final double? radius = double.tryParse(matchingPremise['premises_radius']?.toString() ?? '');
+        final String name = matchingPremise['premises_name']?.toString() ?? 'Workspace';
+        if (lat != null && lng != null && radius != null) {
+          await StorageService.savePremiseDetails(lat: lat, lng: lng, radius: radius, name: name);
+        }
+      }
+
       final matchedPremise = await LocationService.getMatchedPremise(premises);
       final lastPunchStatus =
           await repository.apiService.getLastPunchStatus(username: memberId);
+
+      bool isPunchedIn = lastPunchStatus != "out";
 
       if (matchedPremise != null &&
           whosId.isNotEmpty &&
@@ -86,12 +150,24 @@ class LoginController extends GetxController {
           whosId: whosId,
         );
 
-        // if (success) {
-        //   await StorageService.saveAttendance(
-        //     status: "in",
-        //     premiseName: matchedPremise['premises_name'].toString(),
-        //   );
-        // }
+        if (success) {
+          isPunchedIn = true;
+        }
+      }
+
+      await StorageService.saveAttendanceStatus(isPunchedIn ? "in" : "out");
+
+      if (!kIsWeb) {
+        try {
+          await LocationService.requestBackgroundLocationPermission();
+          await LocationBgService.startServiceIfPermissionsGranted();
+          await StorageService.addLog("Foreground App: Invoking background tracking start on login");
+          FlutterBackgroundService().invoke('startTracking');
+          FlutterBackgroundService().invoke('updatePunchStatus', {'status': isPunchedIn ? "in" : "out"});
+        } catch (bgError) {
+          await StorageService.addLog("Foreground App: Background tracking invoke on login failed: $bgError");
+          debugPrint("Background service tracking invoke failed: $bgError");
+        }
       }
 
       Get.snackbar(
@@ -102,7 +178,7 @@ class LoginController extends GetxController {
 
       Get.offAllNamed(AppRoutes.dashboard);
     } catch (e) {
-      print("LOGIN ERROR => $e");
+      debugPrint("LOGIN ERROR => $e");
       Get.snackbar(
         "Login Failed",
         e.toString(),
@@ -141,7 +217,7 @@ class LoginController extends GetxController {
         },
       );
     } catch (e) {
-      print("GOOGLE LOGIN ERROR => $e");
+      debugPrint("GOOGLE LOGIN ERROR => $e");
       Get.snackbar(
         "Google Login Failed",
         e.toString(),
@@ -163,10 +239,18 @@ class LoginController extends GetxController {
 
       String? fcmDeviceToken;
       try {
-        fcmDeviceToken = await FirebaseMessaging.instance.getToken();
-        print("REAL FCM DEVICE TOKEN => $fcmDeviceToken");
+        final NotificationSettings settings =
+            await FirebaseMessaging.instance.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+        if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+          fcmDeviceToken = await FirebaseMessaging.instance.getToken();
+          debugPrint("REAL FCM DEVICE TOKEN => $fcmDeviceToken");
+        }
       } catch (fcmError) {
-        print("Error fetching FCM token: $fcmError");
+        debugPrint("Error fetching FCM token: $fcmError");
       }
 
       final String googleEmail = user.email?.toString().trim() ?? "";
@@ -180,10 +264,10 @@ class LoginController extends GetxController {
         token: fcmDeviceToken ?? '',
       );
 
-      print("GOOGLE EMAIL => $googleEmail");
+      debugPrint("GOOGLE EMAIL => $googleEmail");
 
       final firstLoginResponse = await repository.apiService.first_login();
-      print("FIRST LOGIN => $firstLoginResponse");
+      debugPrint("FIRST LOGIN => $firstLoginResponse");
 
       final firstLoginData = firstLoginResponse['response'] ?? {};
       final firstUser = firstLoginData['MemberId']?.toString() ?? '';
@@ -224,13 +308,18 @@ class LoginController extends GetxController {
         md5: dbPassMD5,
       );
 
+      final authResponseData = authResponse['response'] ?? {};
       final backendToken =
-          authResponse['response']?['Access_Token']?.toString() ?? '';
+          authResponseData['Access_Token']?.toString() ?? '';
+      final authUserData = authResponseData['User_Data'] ?? {};
+      final googleGroupId = authUserData['groupID']?.toString() ?? '';
+
       if (backendToken.isEmpty) {
         throw Exception("Unable to generate VTAP token");
       }
 
       String whosId = "";
+      String whosPremise = "";
       final whosResponse = await repository.apiService.getTableData(
         tableName: "whos",
         username: memberId,
@@ -242,17 +331,19 @@ class LoginController extends GetxController {
         final whosRecords = whosResponse['response']['Records'] as List;
         if (whosRecords.isNotEmpty) {
           whosId = whosRecords.first['whos_id']?.toString() ?? '';
+          whosPremise = whosRecords.first['whos_premise']?.toString() ?? '';
         }
       }
 
-      if (whosId.isNotEmpty) {
+      if (whosId.isNotEmpty &&
+          fcmDeviceToken != null &&
+          fcmDeviceToken.isNotEmpty) {
         await repository.apiService.updateWhosGoogleToken(
-            username: memberId,
-            accessToken: backendToken,
-            whosId: whosId,
-            googleToken: fcmDeviceToken ?? '',
-            firstUser: firstUser,
-            firstToken: firstToken);
+          username: memberId,
+          accessToken: backendToken,
+          whosId: whosId,
+          googleToken: fcmDeviceToken,
+        );
       }
 
       await StorageService.saveLoginData(
@@ -260,14 +351,42 @@ class LoginController extends GetxController {
         username: memberId,
         userId: memberId,
         whosId: whosId,
+        groupId: googleGroupId,
         firstUser: firstUser,
         firstToken: backendToken,
+        whosPremise: whosPremise,
       );
+
+      if (whosId.trim().isEmpty) {
+        Get.snackbar("Warning", "Mapped profile not found (Missing Whos ID). Attendance features will be locked.",
+            backgroundColor: Colors.amber, colorText: Colors.black87, duration: const Duration(seconds: 5));
+      }
 
       final premises =
           await repository.apiService.getPremises(username: memberId);
+
+      // Save details of assigned premise to Storage for native Kotlin service
+      Map<String, dynamic>? matchingPremise;
+      for (final p in premises) {
+        if (p['premises_id']?.toString() == whosPremise) {
+          matchingPremise = Map<String, dynamic>.from(p);
+          break;
+        }
+      }
+
+      if (matchingPremise != null) {
+        final double? lat = double.tryParse(matchingPremise['premises_latitude']?.toString() ?? '');
+        final double? lng = double.tryParse(matchingPremise['premises_longitude']?.toString() ?? '');
+        final double? radius = double.tryParse(matchingPremise['premises_radius']?.toString() ?? '');
+        final String name = matchingPremise['premises_name']?.toString() ?? 'Workspace';
+        if (lat != null && lng != null && radius != null) {
+          await StorageService.savePremiseDetails(lat: lat, lng: lng, radius: radius, name: name);
+        }
+      }
+
       final matchedPremise = await LocationService.getMatchedPremise(premises);
 
+      bool googleIsPunchedIn = false;
       if (matchedPremise != null && whosId.isNotEmpty) {
         final success = await repository.apiService.submitPunch(
           username: memberId,
@@ -277,12 +396,24 @@ class LoginController extends GetxController {
           whosId: whosId,
         );
 
-        // if (success) {
-        //   await StorageService.saveAttendance(
-        //     status: "in",
-        //     premiseName: matchedPremise['premises_name'].toString(),
-        //   );
-        // }
+        if (success) {
+          googleIsPunchedIn = true;
+        }
+      }
+
+      await StorageService.saveAttendanceStatus(googleIsPunchedIn ? "in" : "out");
+
+      if (!kIsWeb) {
+        try {
+          await LocationService.requestBackgroundLocationPermission();
+          await LocationBgService.startServiceIfPermissionsGranted();
+          await StorageService.addLog("Foreground App: Invoking background tracking start on Google login");
+          FlutterBackgroundService().invoke('startTracking');
+          FlutterBackgroundService().invoke('updatePunchStatus', {'status': googleIsPunchedIn ? "in" : "out"});
+        } catch (bgError) {
+          await StorageService.addLog("Foreground App: Background tracking invoke on Google login failed: $bgError");
+          debugPrint("Background service tracking invoke failed: $bgError");
+        }
       }
 
       Get.snackbar(
@@ -295,7 +426,7 @@ class LoginController extends GetxController {
 
       Get.offAllNamed(AppRoutes.dashboard);
     } catch (e) {
-      print("GOOGLE HANDLE ERROR => $e");
+      debugPrint("GOOGLE HANDLE ERROR => $e");
       Get.snackbar(
         "Google Login Failed",
         e.toString(),

@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import '../core/services/offline_queue_service.dart';
 import '../data/models/task_model.dart';
 import 'task_detail_sheet.dart';
 
@@ -19,6 +20,8 @@ class TaskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool isPendingSync = Get.find<OfflineQueueService>().isTaskPendingSync(task.id);
+
     return GestureDetector(
       onTap: () => Get.bottomSheet(
         TaskDetailSheet(task: task, isHindi: isHindi),
@@ -49,7 +52,7 @@ class TaskCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            _buildStatusIcon(),
+            _buildStatusIcon(isPendingSync),
             const SizedBox(width: 18),
             Expanded(
               child: Column(
@@ -72,6 +75,11 @@ class TaskCard extends StatelessWidget {
                       const SizedBox(width: 10),
                       _miniTag(Icons.location_on_outlined,
                           task.where.split(' ').first, Colors.orange),
+                      if (isPendingSync) ...[
+                        const SizedBox(width: 10),
+                        _miniTag(Icons.cloud_upload_outlined,
+                            isHindi ? "सिंक बाकी" : "Pending Sync", Colors.amber.shade800),
+                      ],
                     ],
                   )
                 ],
@@ -85,7 +93,22 @@ class TaskCard extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusIcon() {
+  Widget _buildStatusIcon(bool isPendingSync) {
+    if (isPendingSync) {
+      return Container(
+        width: 50,
+        height: 50,
+        decoration: BoxDecoration(
+          color: Colors.amber.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Icon(
+          Icons.cloud_upload_rounded,
+          color: Colors.amber.shade800,
+        ),
+      );
+    }
+
     return Container(
       width: 50,
       height: 50,

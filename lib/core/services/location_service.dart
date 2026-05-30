@@ -1,6 +1,72 @@
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class LocationService {
+  // =====================================================
+  // REQUEST BACKGROUND LOCATION PERMISSION
+  // =====================================================
+
+  static Future<bool> requestBackgroundLocationPermission() async {
+    try {
+      // 1. First ensure foreground location is granted
+      final foregroundGranted = await checkLocationPermission();
+      if (!foregroundGranted) {
+        return false;
+      }
+
+      // 2. Check current status of locationAlways (Background Location)
+      var status = await Permission.locationAlways.status;
+      if (status.isGranted) {
+        return true;
+      }
+
+      // 3. If not granted, display explanation dialog first
+      bool userAcceptedDialog = false;
+      await Get.defaultDialog(
+        title: "🔒 Background Location Needed",
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        titlePadding: const EdgeInsets.only(top: 20),
+        middleText: "Auto Punch-In/Out features ko background mein chalane ke liye, location access ko settings mein 'Allow all the time' (Hamesha allow karein) select karna zaroori hai.\n\nAgle screen par permissions mein jaakar 'Allow all the time' option ko select karein.",
+        textConfirm: "Settings Kholein",
+        textCancel: "Cancel",
+        confirmTextColor: Colors.white,
+        cancelTextColor: Colors.grey,
+        buttonColor: Colors.blueAccent,
+        onConfirm: () {
+          userAcceptedDialog = true;
+          Get.back();
+        },
+        onCancel: () {
+          userAcceptedDialog = false;
+        },
+      );
+
+      if (!userAcceptedDialog) {
+        return false;
+      }
+
+      // 4. Request background permission
+      status = await Permission.locationAlways.request();
+      if (status.isGranted) {
+        return true;
+      } else {
+        Get.snackbar(
+          "Permission Denied",
+          "Background tracking lock hai jab tak aap 'Allow all the time' nahi select karte.",
+          backgroundColor: Colors.amber,
+          colorText: Colors.black87,
+          duration: const Duration(seconds: 5),
+        );
+        return false;
+      }
+    } catch (e) {
+      debugPrint("BACKGROUND PERMISSION ERROR => $e");
+      return false;
+    }
+  }
+
   // =====================================================
   // CHECK LOCATION PERMISSION
   // =====================================================
@@ -26,7 +92,7 @@ class LocationService {
 
       return true;
     } catch (e) {
-      print("PERMISSION ERROR => $e");
+      debugPrint("PERMISSION ERROR => $e");
 
       return false;
     }
@@ -59,20 +125,21 @@ class LocationService {
       final position = await determinePosition();
 
       for (final premise in premises) {
-        final double lat = double.tryParse(
-              premise['premises_latitude']?.toString() ?? "0",
-            ) ??
-            0.0;
+        final latVal = premise['premises_latitude'];
+        final lngVal = premise['premises_longitude'];
+        final radVal = premise['premises_radius'];
 
-        final double lng = double.tryParse(
-              premise['premises_longitude']?.toString() ?? "0",
-            ) ??
-            0.0;
+        if (latVal == null || lngVal == null || radVal == null) {
+          continue;
+        }
 
-        final double radius = double.tryParse(
-              premise['premises_radius']?.toString() ?? "100",
-            ) ??
-            100.0;
+        final double? lat = double.tryParse(latVal.toString());
+        final double? lng = double.tryParse(lngVal.toString());
+        final double? radius = double.tryParse(radVal.toString());
+
+        if (lat == null || lng == null || radius == null) {
+          continue;
+        }
 
         final double distance = Geolocator.distanceBetween(
           position.latitude,
@@ -81,11 +148,11 @@ class LocationService {
           lng,
         );
 
-        print("PREMISE => ${premise['premises_name']}");
+        debugPrint("PREMISE => ${premise['premises_name']}");
 
-        print("DISTANCE => $distance");
+        debugPrint("DISTANCE => $distance");
 
-        print("RADIUS => $radius");
+        debugPrint("RADIUS => $radius");
 
         if (distance <= radius) {
           return Map<String, dynamic>.from(
@@ -96,7 +163,7 @@ class LocationService {
 
       return null;
     } catch (e) {
-      print("MATCH PREMISE ERROR => $e");
+      debugPrint("MATCH PREMISE ERROR => $e");
 
       return null;
     }
@@ -124,20 +191,21 @@ class LocationService {
     try {
       final position = await determinePosition();
 
-      final double lat = double.tryParse(
-            premise['premises_latitude']?.toString() ?? "0",
-          ) ??
-          0.0;
+      final latVal = premise['premises_latitude'];
+      final lngVal = premise['premises_longitude'];
+      final radVal = premise['premises_radius'];
 
-      final double lng = double.tryParse(
-            premise['premises_longitude']?.toString() ?? "0",
-          ) ??
-          0.0;
+      if (latVal == null || lngVal == null || radVal == null) {
+        return false;
+      }
 
-      final double radius = double.tryParse(
-            premise['premises_radius']?.toString() ?? "100",
-          ) ??
-          100.0;
+      final double? lat = double.tryParse(latVal.toString());
+      final double? lng = double.tryParse(lngVal.toString());
+      final double? radius = double.tryParse(radVal.toString());
+
+      if (lat == null || lng == null || radius == null) {
+        return false;
+      }
 
       final double distance = Geolocator.distanceBetween(
         position.latitude,
@@ -146,15 +214,15 @@ class LocationService {
         lng,
       );
 
-      print("========== PREMISE CHECK ==========");
-      print("PREMISE => ${premise['premises_name']}");
-      print("DISTANCE => $distance");
-      print("RADIUS => $radius");
-      print("===================================");
+      debugPrint("========== PREMISE CHECK ==========");
+      debugPrint("PREMISE => ${premise['premises_name']}");
+      debugPrint("DISTANCE => $distance");
+      debugPrint("RADIUS => $radius");
+      debugPrint("===================================");
 
       return distance <= radius;
     } catch (e) {
-      print("INSIDE PREMISE ERROR => $e");
+      debugPrint("INSIDE PREMISE ERROR => $e");
 
       return false;
     }

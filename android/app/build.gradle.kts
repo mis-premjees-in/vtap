@@ -17,7 +17,7 @@ android {
 
         applicationId = "com.premjees.vtap"
 
-        minSdk = 24
+        minSdk = flutter.minSdkVersion
 
         targetSdk = 36
 
@@ -49,9 +49,23 @@ android {
 
             signingConfig = signingConfigs.getByName("debug")
 
-            isMinifyEnabled = false
+            isMinifyEnabled = true
 
-            isShrinkResources = false
+            isShrinkResources = true
+
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+    // Add this block to rename the output APK
+    applicationVariants.all {
+        val variant = this
+        outputs.all {
+            val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            // This will name it something like: MyCustomAppName-release.apk
+            output.outputFileName = "VTAP-${variant.buildType.name}.apk"
         }
     }
 }

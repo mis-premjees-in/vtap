@@ -15,7 +15,7 @@
     <application
         android:label="VTAP"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@mipmap/launcher_icon"
         android:usesCleartextTraffic="true"
         android:largeHeap="true"
         android:enableOnBackInvokedCallback="true">
@@ -27,6 +27,10 @@
     android:name="id.flutter.flutter_background_service.BackgroundService"
     android:foregroundServiceType="location"
     android:exported="true" />
+        <service
+            android:name="com.premjees.vtap.VtapLocationService"
+            android:foregroundServiceType="location"
+            android:exported="false" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -11,6 +11,7 @@ import 'core/services/notification_service.dart';
 import 'routes/app_pages.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:vtap/core/services/offline_queue_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,13 +33,12 @@ void main() async {
     await Firebase.initializeApp();
   }
 
-  // 2. NOW listen to foreground messaging safely
   FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-    print('Got a message while in the foreground!');
-    print('Message data: ${message.data}');
+    debugPrint('Got a message while in the foreground!');
+    debugPrint('Message data: ${message.data}');
 
     if (message.notification != null) {
-      print(
+      debugPrint(
           'Message also contained a notification: ${message.notification?.title}');
       Get.snackbar(
         message.notification?.title ?? "Notification",
@@ -50,18 +50,15 @@ void main() async {
 
   // 3. GetStorage init
   await GetStorage.init();
+  Get.put(OfflineQueueService());
 
-  // 4. Notification Service init (Creates local channels now!)
-  // 1. GetStorage initialization
-  await GetStorage.init();
+  if (!kIsWeb) {
+    // 4. Notification Service init (Creates local channels now!)
+    await NotificationService.init();
 
-  // 2. Local notification system startup
-  await NotificationService.init();
-
-  // 🔥 NEW: Launch location boundary geofencing monitor threads
-  await LocationBgService.initializeBackgroundTracking();
-
-  runApp(const MyApp());
+    // 🔥 NEW: Launch location boundary geofencing monitor threads
+    await LocationBgService.initializeBackgroundTracking();
+  }
 
   runApp(const MyApp());
 }

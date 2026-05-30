@@ -155,22 +155,87 @@ class PresenceController extends GetxController {
     try {
       isLoading.value = true;
 
-      // 1. USE EXPLICIT FORCE TYPE PASSED DIRECTLY FROM DASHBOARD VIEW FLOW
-      String nextType = forceType;
-
-      // 2. FETCH LIVE PREMISES FROM SERVER
-      List premises = await _api.getPremises(username: username);
-      if (premises.isEmpty) {
-        Get.snackbar("Error", "No registered premises found for your profile.",
+      // 1. Fetch latest whos_premise ID from server (no local cache dependency)
+      final whosId = await StorageService.getWhosId();
+      if (whosId.isEmpty) {
+        Get.snackbar("Error", "No profile mapping found (Missing whos_id).",
             backgroundColor: Colors.red, colorText: Colors.white);
         return false;
       }
 
-      // Check location permissions
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
+      final whosResponse = await _api.getTableData(
+        tableName: "whos",
+        username: username,
+        customWhere: "whos_id='$whosId'",
+      );
+
+      if (whosResponse['status'] != true || whosResponse['response']?['Error'] != "0") {
+        Get.snackbar("Error", "Failed to retrieve your profile details from the server.",
+            backgroundColor: Colors.red, colorText: Colors.white);
+        return false;
       }
+
+      final whosRecords = whosResponse['response']['Records'] as List;
+      if (whosRecords.isEmpty) {
+        Get.snackbar("Error", "No profile records found on the server.",
+            backgroundColor: Colors.red, colorText: Colors.white);
+        return false;
+      }
+
+      final String whosPremiseId = whosRecords.first['whos_premise']?.toString() ?? '';
+      if (whosPremiseId.isEmpty) {
+        Get.snackbar("Error", "No workspace premise assigned to your profile on the server.",
+            backgroundColor: Colors.red, colorText: Colors.white);
+        return false;
+      }
+
+      // Save the fresh one to storage
+      await StorageService.saveWhosPremise(whosPremiseId);
+
+      // 2. Fetch all premises list and match by ID
+      final premises = await _api.getPremises(username: username);
+      Map<String, dynamic>? matchingPremise;
+      for (final p in premises) {
+        if (p['premises_id']?.toString() == whosPremiseId) {
+          matchingPremise = Map<String, dynamic>.from(p);
+          break;
+        }
+      }
+
+      if (matchingPremise == null) {
+        Get.snackbar("Error", "Your assigned workspace premise (ID: $whosPremiseId) was not found in the premises list.",
+            backgroundColor: Colors.red, colorText: Colors.white);
+        return false;
+      }
+
+      final latVal = matchingPremise['premises_latitude'];
+      final lngVal = matchingPremise['premises_longitude'];
+      final radVal = matchingPremise['premises_radius'];
+      final String premiseName = matchingPremise['premises_name']?.toString() ?? 'Workspace';
+
+      if (latVal == null || lngVal == null || radVal == null) {
+        Get.snackbar("Error", "Assigned premise coordinates or radius are missing from the server.",
+            backgroundColor: Colors.red, colorText: Colors.white);
+        return false;
+      }
+
+      double? shopLat = double.tryParse(latVal.toString());
+      double? shopLng = double.tryParse(lngVal.toString());
+      double? allowedRadius = double.tryParse(radVal.toString());
+
+      if (shopLat == null || shopLng == null || allowedRadius == null) {
+        Get.snackbar("Error", "Assigned premise coordinates or radius are invalid on the server.",
+            backgroundColor: Colors.red, colorText: Colors.white);
+        return false;
+      }
+
+      // Save premise details to Storage for native background service usage
+      await StorageService.savePremiseDetails(
+        lat: shopLat,
+        lng: shopLng,
+        radius: allowedRadius,
+        name: premiseName,
+      );
 
       // 3. FETCH HIGH ACCURACY GPS COORDINATES
       Position? currentPos;
@@ -184,63 +249,42 @@ class PresenceController extends GetxController {
       }
 
       if (currentPos == null) {
-        Get.snackbar("Location Error",
-            "Hardware GPS issue. Verify device location is turned ON.",
+        Get.snackbar("Location Error", "Hardware GPS issue. Verify device location is turned ON.",
             backgroundColor: Colors.red, colorText: Colors.white);
         return false;
       }
 
-      // 4. SCAN THROUGH ALL PREMISES TO CHECK IF USER IS WITHIN 5 METERS
-      bool isWithinAnyPremise = false;
-      var matchedPremise;
-      double closestDistance = double.infinity;
+      double distance = Geolocator.distanceBetween(
+          currentPos.latitude, currentPos.longitude, shopLat, shopLng);
 
-      for (var premise in premises) {
-        try {
-          double shopLat =
-              double.parse(premise['premises_latitude'].toString());
-          double shopLng =
-              double.parse(premise['premises_longitude'].toString());
-
-          double distance = Geolocator.distanceBetween(
-              currentPos.latitude, currentPos.longitude, shopLat, shopLng);
-
-          if (distance < closestDistance) {
-            closestDistance = distance;
-          }
-
-          if (distance <= 5.0) {
-            isWithinAnyPremise = true;
-            matchedPremise = premise;
-            break; // Target premise found, exit loop immediately
-          }
-        } catch (e) {
-          debugPrint("Premise parsing sequence skip error: $e");
-        }
-      }
-
-      // 5. ENFORCE RADIUS PERIMETER BOUNDARY CONDITION MATCH
-      if (isWithinAnyPremise && matchedPremise != null) {
-        String premiseId = matchedPremise['premises_id'].toString();
+      // 4. Manual Attendance must be within the database allowed radius
+      if (distance <= allowedRadius) {
         String token = await StorageService.getToken();
         String whosId = await StorageService.getWhosId();
 
-        // 6. SUBMIT ENFORCED CASING VALUE DIRECTLY TO SERVER
+        if (username.trim().isEmpty || token.trim().isEmpty || whosId.trim().isEmpty) {
+          Get.defaultDialog(
+            title: "🔒 Configuration Error",
+            middleText: "Aapke account ki profile registration details incomplete hain. Admin se contact karein.",
+            textConfirm: "OK",
+            confirmTextColor: Colors.white,
+            buttonColor: Colors.redAccent,
+            onConfirm: () => Get.back(),
+          );
+          return false;
+        }
+
         final success = await _api.submitPunch(
           username: username,
           accessToken: token,
-          type:
-              nextType, // Sends exact "In" or "Out" matching DB casing requirements
-          premiseId: premiseId,
+          type: forceType,
+          premiseId: whosPremiseId,
           whosId: whosId,
         );
 
         if (success) {
-          // Trigger the completion callback to sync foreground controller state
-          onPunchSuccess(nextType);
-
-          Get.snackbar("Success",
-              "Attendance registered successfully as ${nextType.toUpperCase()}",
+          onPunchSuccess(forceType);
+          Get.snackbar("Success", "Attendance registered successfully as ${forceType.toUpperCase()}",
               backgroundColor: Colors.green,
               colorText: Colors.white,
               snackPosition: SnackPosition.BOTTOM);
@@ -250,15 +294,13 @@ class PresenceController extends GetxController {
       } else {
         Get.defaultDialog(
           title: "Range Error",
-          middleText:
-              "Aap kisi bhi assigned shop ke center point ke pass nahi hain.\n\nClosest Premise: ${closestDistance.toStringAsFixed(1)}m door.\n\nAttendance strictly counter radius (5m) ke andar allowed hai.",
+          middleText: "Aap assigned shop ke center point se door hain.\n\nDistance: ${distance.toStringAsFixed(1)}m door.\n\nAttendance strictly center radius (${allowedRadius.toStringAsFixed(1)}m) ke andar allowed hai.",
           textConfirm: "Retry Check",
           buttonColor: Colors.deepOrange,
           confirmTextColor: Colors.white,
           onConfirm: () {
             Get.back();
-            handlePunchToggle(username,
-                forceType: forceType, onPunchSuccess: onPunchSuccess);
+            handlePunchToggle(username, forceType: forceType, onPunchSuccess: onPunchSuccess);
           },
         );
         return false;
@@ -277,13 +319,47 @@ class PresenceController extends GetxController {
   // =========================================================================
   Future<bool> isUserWithinTaskRadius(String username, String premiseId) async {
     try {
-      List premises = await _api.getPremises(username: username);
-      if (premises.isEmpty) return false;
+      // Fetch all premises list and match by ID
+      final premises = await _api.getPremises(username: username);
+      Map<String, dynamic>? matchingPremise;
+      for (final p in premises) {
+        if (p['premises_id']?.toString() == premiseId) {
+          matchingPremise = Map<String, dynamic>.from(p);
+          break;
+        }
+      }
 
-      var activePremise = premises.firstWhere(
-        (p) => p['premises_id'].toString() == premiseId.toString(),
-        orElse: () => null,
-      );
+      if (matchingPremise == null) {
+        return false;
+      }
+
+      final latVal = matchingPremise['premises_latitude'];
+      final lngVal = matchingPremise['premises_longitude'];
+      final radVal = matchingPremise['premises_radius'];
+
+      if (latVal == null || lngVal == null || radVal == null) {
+        Get.snackbar(
+          "Task Validation Error",
+          "Workspace coordinates or radius missing in the database.",
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+        return false;
+      }
+
+      double? shopLat = double.tryParse(latVal.toString());
+      double? shopLng = double.tryParse(lngVal.toString());
+      double? allowedTaskRadius = double.tryParse(radVal.toString());
+
+      if (shopLat == null || shopLng == null || allowedTaskRadius == null) {
+        Get.snackbar(
+          "Task Validation Error",
+          "Workspace coordinates or radius are invalid in the database.",
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+        return false;
+      }
 
       Position? currentPos;
       try {
@@ -296,28 +372,6 @@ class PresenceController extends GetxController {
       }
 
       if (currentPos == null) return false;
-
-      if (activePremise == null) {
-        for (var premise in premises) {
-          double shopLat =
-              double.parse(premise['premises_latitude'].toString());
-          double shopLng =
-              double.parse(premise['premises_longitude'].toString());
-          double radius =
-              double.tryParse(premise['premises_radius'].toString()) ?? 50.0;
-          double distance = Geolocator.distanceBetween(
-              currentPos.latitude, currentPos.longitude, shopLat, shopLng);
-          if (distance <= radius) return true;
-        }
-        return false;
-      }
-
-      double shopLat =
-          double.parse(activePremise['premises_latitude'].toString());
-      double shopLng =
-          double.parse(activePremise['premises_longitude'].toString());
-      double allowedTaskRadius =
-          double.tryParse(activePremise['premises_radius'].toString()) ?? 50.0;
 
       double distance = Geolocator.distanceBetween(
           currentPos.latitude, currentPos.longitude, shopLat, shopLng);
